@@ -1,0 +1,16 @@
+{
+  "name": "openfanqie",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "description": "",
+  "dependencies": {
+    "axios": "^1.7.7",
+    "express": "^4.19.2",
+    "querystring": "^0.2.1"
+  }
+}
