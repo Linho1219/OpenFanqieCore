@@ -62,6 +62,9 @@ type Note = {
   ornaments: Array<string>;
 };
 
+/** Sign 命令列表 */
+const SIGN_CMD_LIST = ["zkh", "ykh"];
+
 /** 音符装饰记号列表 */
 const NOTE_ORN_LIST = [
   "pp",
@@ -179,14 +182,14 @@ type Line = {
 type State = "space" | "note" | "sign" | "modifier" | "barline" | "command";
 
 /** 判断当前字符性质 */
-function judgeState(char: string): State {
+function judgeState(char: string) {
   if (char === " ") return "space";
   if (char.match(/[a-z&+]/) !== null) return "command";
   if (["0", "1", "2", "3", "4", "5", "6", "7", "9"].includes(char))
     return "note";
   if (["8", "-"].includes(char)) return "sign";
   if (["|", ":"].includes(char)) return "barline";
-  else return "modifier";
+  return "modifier";
 }
 
 /** 判断当前 sign 类型 */
@@ -206,11 +209,16 @@ function judgeSignType(char: string) {
  *  @param index 出错位置
  *  @param source 来源字符串
  */
-function parserWarn(content: string, index: number, source: string) {
+function parserWarn(
+  content: string,
+  index: number,
+  source: string,
+  length: number = 1
+) {
   console.warn(
     `${content} @ char ${index}\n  source: ${source}\n${" ".repeat(
       index + 10
-    )}^`
+    )}${"^".repeat(length)}`
   );
 }
 
@@ -228,9 +236,9 @@ function parseLine(input: string) {
   /** 上一个单位（非空格非修饰符）的状态 */
   let targetState: State = "space";
   /** 当前处理的音符 */
-  let currentNote: Note = freshNote();
+  let currentNote: Note | undefined = undefined;
   /** 当前处理的符号 */
-  let currentSign: Sign = freshSign("invisible");
+  let currentSign: Sign | undefined = undefined;
   /** 当前处理的命令 */
   let currentCommand = "";
 
@@ -247,35 +255,46 @@ function parseLine(input: string) {
     if (!["space", "modifier", "command"].includes(lastState))
       targetState = lastState;
 
-    // 小节线结算
+    // 结算
+    // 小节线结算：小节线之后，非修饰符或空格，或 & 命令开始
     if (
-      targetState === "barline" &&
-      !["barline", "modifier", "space"].includes(state)
+      (targetState === "barline" &&
+        !["barline", "modifier", "space", "command"].includes(state)) ||
+      char === "&"
     ) {
-      line.notes.push(currentBarline!);
+      if (typeof currentBarline !== "undefined")
+        line.notes.push(currentBarline);
       currentBarline = undefined;
     }
-
-    // 音符/符号结算
+    // 音符/符号结算：非修饰符或空格，或 & 命令开始
     if (
-      !(
-        state === "modifier" ||
-        state === "space" ||
-        (state === "barline" && lastState === "barline")
-      )
+      !["modifier", "space", "command"].includes(state) ||
+      char === "&"
+      // && (state !== "barline" || lastState !== "barline")
     ) {
-      if (targetState === "note") {
+      if (currentNote !== undefined) {
         line.notes.push(currentNote);
-      } else if (targetState === "sign") line.notes.push(currentSign);
+        currentNote = undefined;
+      } else if (currentSign !== undefined) {
+        line.notes.push(currentSign);
+        currentSign = undefined;
+      }
     }
-
     // 命令结算
     if (state !== "command" && currentCommand !== "") {
       let command = currentCommand.slice(1);
-      if (command === "zkh") line.notes.push(freshSign("parenthese-left"));
-      else if (command === "ykh")
-        line.notes.push(freshSign("parenthese-right"));
-      else if (
+      if (SIGN_CMD_LIST.includes(command)) {
+        if (command === "zkh") line.notes.push(freshSign("parenthese-left"));
+        else if (command === "ykh")
+          line.notes.push(freshSign("parenthese-right"));
+        else
+          parserWarn(
+            `Command Error: Command '${currentCommand}' registered as Sign but failed to find implement`,
+            index - currentCommand.length,
+            input,
+            currentCommand.length
+          );
+      } else if (
         line.notes.at(-1)?.cate === "Note" &&
         NOTE_ORN_LIST.includes(command)
       ) {
@@ -285,13 +304,26 @@ function parseLine(input: string) {
         BARLINE_ORN_LIST.includes(command)
       ) {
         line.notes.at(-1)!.ornaments.push(command);
-      } else
+      } else {
+        let warnStr;
+        if (NOTE_ORN_LIST.includes(command))
+          warnStr = `Command '${currentCommand}' should be used after note or rest, but found ${
+            line.notes.at(-1)?.cate
+          }`;
+        else if (BARLINE_ORN_LIST.includes(command))
+          warnStr = `Command '${currentCommand}' should be used after barline, but found ${
+            line.notes.at(-1)?.cate
+          }`;
+        else warnStr = `Unknown command '${currentCommand}'`;
         parserWarn(
-          `Command Error: Unknown or misuse command '${currentCommand}'`,
-          index,
-          input
+          "Command Error: " + warnStr,
+          index - currentCommand.length,
+          input,
+          currentCommand.length
         );
+      }
       currentCommand = "";
+      targetState = "command";
     }
 
     // 进入字符判断流程
@@ -306,72 +338,78 @@ function parseLine(input: string) {
           parserWarn("Command Error: Missing '&' before command", index, input);
       }
     else if (state === "note") {
+      if (currentNote !== undefined)
+        parserWarn(
+          `Internal Error: Unpushed Note ${currentNote.pitch}`,
+          index,
+          input
+        );
       currentNote = freshNote(char);
     } else if (state === "sign") {
       line.notes.push(freshSign(judgeSignType(char)));
     } else if (state === "modifier") {
       if (targetState === "note") {
-        switch (char) {
-          case ",": // 下加一点
-            currentNote.range -= 1;
-            break;
-          case "'": // 上加一点
-            currentNote.range += 1;
-            break;
-          case "#": // 升号
-            currentNote.accidental = "sharp";
-            break;
-          case "$": // 降号
-            currentNote.accidental = "flat";
-            break;
-          case "=": // 还原号
-            currentNote.accidental = "natural";
-            break;
-          case ".": // 附点
-            currentNote.dot++;
-            break;
-          case "/": // 时值线
-            currentNote.duration *= 2;
-            break;
-          default:
-            parserWarn(
-              `Modifier Error: Unknown modifier '${char}'`,
-              index,
-              input
-            );
-            break;
-        }
+        if (currentNote?.cate !== "Note")
+          parserWarn(
+            `Internal Error: Target is Note but found ${currentNote?.cate}`,
+            index,
+            input
+          );
+        else
+          switch (char) {
+            case ",": // 下加一点
+              currentNote.range -= 1;
+              break;
+            case "'": // 上加一点
+              currentNote.range += 1;
+              break;
+            case "#": // 升号
+              currentNote.accidental = "sharp";
+              break;
+            case "$": // 降号
+              currentNote.accidental = "flat";
+              break;
+            case "=": // 还原号
+              currentNote.accidental = "natural";
+              break;
+            case ".": // 附点
+              currentNote.dot++;
+              break;
+            case "/": // 时值线
+              currentNote.duration *= 2;
+              break;
+            default:
+              parserWarn(
+                `Modifier Error: Unknown modifier '${char}'`,
+                index,
+                input
+              );
+              break;
+          }
       } else if (targetState === "barline" && currentBarline !== undefined) {
-        if (char === "/")
-          if (currentBarline.type === "normal")
-            // "|/"
-            currentBarline.type = "hidden";
-          else if (currentBarline.type === "end")
-            // "||/"
-            currentBarline.type = "double";
-          else
-            parserWarn(
-              `Barline Error: Unexpected modifier '/' after barline ${currentBarline.type}`,
-              index,
-              input
-            );
+        if (char === "/" && currentBarline.type === "normal")
+          // "| +/"
+          currentBarline.type = "hidden";
+        else if (char === "/" && currentBarline.type === "end")
+          // "|| +/"
+          currentBarline.type = "double";
         else if (char === "*" && currentBarline.type === "normal")
-          // "|*"
+          // "| +*"
           currentBarline.type = "invisible";
         else
           parserWarn(
-            `Modifier Error: Modifier failed to find token to describe but found previous barline ${currentBarline.type}`,
+            `Barline Error: Unexpected modifier '${char}' after barline ${currentBarline.type}`,
             index,
             input
           );
       } else
         parserWarn(
-          `Modifier Error: Modifier failed to find token to describe but found previous ${targetState}`,
+          `Modifier Error: Unexpected modifier ${char} after ${targetState}`,
           index,
           input
         );
     } else if (state === "barline") {
-      if (typeof currentBarline === "undefined") {
+      if (currentBarline === undefined) {
         if (char === "|")
           // "|"
           currentBarline = {
@@ -417,8 +455,10 @@ function parseLine(input: string) {
       }
     }
   }
-  if (targetState === "note") line.notes.push(currentNote);
-  else if (targetState === "sign") line.notes.push(currentSign);
+  if (targetState === "note" && currentNote !== undefined)
+    line.notes.push(currentNote);
+  else if (targetState === "sign" && currentSign !== undefined)
+    line.notes.push(currentSign);
   else if (targetState === "barline") line.notes.push(currentBarline!);
   return line;
 }
@@ -428,7 +468,7 @@ fs.writeFileSync(
   "./data.json",
   JSON.stringify(
     parseLine(
-      "0/&zkh 1'/ 7/&mf 6/ | 5/ 4/ 3/ 2/ | 1/ 2// 3// 4// 5// 6// 7// | 1'/ 5/ 1'/ 0/&ykh | 5 6 | 5/ 3. | 5,/ 1/ 4/ 3/ |"
+      "0/&zkh 1'/ 7/&mf 6/ | 5/ 4/ 3/ 2/ |&ty 1/ 2// 3// 4// 5// 6// 7// | 1'/ 5/ 1'/ 0/&ykh | 5 6 | 5/ 3. | 5,/ 1/ 4/ 3/ |"
     )
   )
 );
