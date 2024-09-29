@@ -1,6 +1,7 @@
 import express from "express";
 import axios from "axios";
 import path from "path";
+import { draw } from "./draw";
 const PORT: number = 53316;
 const app = express();
 const __dirname = path.resolve(path.dirname(""));
