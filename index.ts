@@ -1,15 +1,12 @@
-"use strict";
-const express = require("express");
-const axios = require("axios");
-const querystring = require('querystring');
-const PORT = 53316;
+import express from "express";
+import axios from "axios";
+import path from "path";
+const PORT: number = 53316;
 const app = express();
+const __dirname = path.resolve(path.dirname(""));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// app.get("/data", (_req, res) => {
-//   res.send("1");
-// });
 app.get("/", (_req, res) => {
   res.redirect("/Zhipu-index.html");
 });
@@ -27,13 +24,9 @@ app.get("/zhipu-getExampleFile", (req, res) => {
 //   res.sendFile("/static/Zhipu-draw", { root: __dirname });
 // });
 app.use(express.urlencoded({ extended: true }));
-
 app.post("/Zhipu-draw", async (req, res) => {
   try {
-    // 转换请求体为 URL 编码格式
-    const formData = querystring.stringify(req.body);
-
-    // 转发请求到目标 URL
+    const formData = new URLSearchParams(req.body).toString();
     const response = await axios.post(
       "http://zhipu.lezhi99.com/Zhipu-draw",
       formData,
@@ -54,9 +47,7 @@ app.post("/Zhipu-draw", async (req, res) => {
     res.status(response.status).set(response.headers).send(response.data);
   } catch (error) {
     console.error("Error:", error);
-    res
-      .status(500)
-      .json({ message: "Internal server error", error: error.message });
+    res.status(500).json({ message: "Internal server error", error: error });
   }
 });
 app.use(express.static("static"));

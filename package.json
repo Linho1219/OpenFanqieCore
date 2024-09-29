@@ -2,15 +2,25 @@
   "name": "openfanqie",
   "version": "1.0.0",
   "main": "index.js",
+  "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "cross-env NODE_NO_WARNINGS=1 node --loader ts-node/esm index.ts",
+    "build": "tsc",
+    "serve": "node dist/index.js"
   },
   "author": "",
   "license": "MIT",
   "description": "",
   "dependencies": {
     "axios": "^1.7.7",
-    "express": "^4.19.2",
-    "querystring": "^0.2.1"
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.7.4",
+    "cross-env": "^7.0.3",
+    "ts-node": "^10.9.2",
+    "tslib": "^2.7.0",
+    "typescript": "^5.6.2"
   }
 }
