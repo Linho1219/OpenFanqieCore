@@ -97,7 +97,7 @@ const NOTE_ORN_LIST = [
 ];
 
 /** 新建音符/休止符 */
-function freshNote(char?: string): Note {
+function createNote(char?: string): Note {
   if (typeof char === "undefined")
     return {
       cate: "Note",
@@ -136,7 +136,7 @@ type Sign = {
   ornaments: Array<string>;
 };
 
-function freshSign(
+function createSign(
   type:
     | "fermata"
     | "invisible"
@@ -168,6 +168,24 @@ type Barline = {
     | "invisible"; // "|*"，不显示但占据空间
   ornaments: Array<string>;
 };
+
+function createBarline(
+  type:
+    | "normal"
+    | "end"
+    | "double"
+    | "repeat-left"
+    | "repeat-right"
+    | "repeat-double"
+    | "hidden"
+    | "invisible"
+): Barline {
+  return {
+    cate: "Barline",
+    type,
+    ornaments: [],
+  };
+}
 
 /** 小节线装饰记号列表 */
 const BARLINE_ORN_LIST = ["fine", "dc", "ds", "ty", "hs"];
@@ -209,7 +227,7 @@ function judgeSignType(char: string) {
  *  @param index 出错位置
  *  @param source 来源字符串
  */
-function parserWarn(
+function warn(
   content: string,
   index: number,
   source: string,
@@ -267,11 +285,7 @@ function parseLine(input: string) {
       currentBarline = undefined;
     }
     // 音符/符号结算：非修饰符或空格，或 & 命令开始
-    if (
-      !["modifier", "space", "command"].includes(state) ||
-      char === "&"
-      // && (state !== "barline" || lastState !== "barline")
-    ) {
+    if (!["modifier", "space", "command"].includes(state) || char === "&") {
       if (currentNote !== undefined) {
         line.notes.push(currentNote);
         currentNote = undefined;
@@ -284,11 +298,11 @@ function parseLine(input: string) {
     if (state !== "command" && currentCommand !== "") {
       let command = currentCommand.slice(1);
       if (SIGN_CMD_LIST.includes(command)) {
-        if (command === "zkh") line.notes.push(freshSign("parenthese-left"));
+        if (command === "zkh") line.notes.push(createSign("parenthese-left"));
         else if (command === "ykh")
-          line.notes.push(freshSign("parenthese-right"));
+          line.notes.push(createSign("parenthese-right"));
         else
-          parserWarn(
+          warn(
             `Command Error: Command '${currentCommand}' registered as Sign but failed to find implement`,
             index - currentCommand.length,
             input,
@@ -315,7 +329,7 @@ function parseLine(input: string) {
             line.notes.at(-1)?.cate
           }`;
         else warnStr = `Unknown command '${currentCommand}'`;
-        parserWarn(
+        warn(
           "Command Error: " + warnStr,
           index - currentCommand.length,
           input,
@@ -330,27 +344,25 @@ function parseLine(input: string) {
     if (state === "command")
       if (char === "&") {
         if (currentCommand === "") currentCommand = "&";
-        else
-          parserWarn("Command Error: Unexpected '&' in command", index, input);
+        else warn("Command Error: Unexpected '&' in command", index, input);
       } else {
         if (currentCommand.slice(0, 1) === "&") currentCommand += char;
-        else
-          parserWarn("Command Error: Missing '&' before command", index, input);
+        else warn("Command Error: Missing '&' before command", index, input);
       }
     else if (state === "note") {
       if (currentNote !== undefined)
-        parserWarn(
+        warn(
           `Internal Error: Unpushed Note ${currentNote.pitch}`,
           index,
           input
         );
-      currentNote = freshNote(char);
+      currentNote = createNote(char);
     } else if (state === "sign") {
-      line.notes.push(freshSign(judgeSignType(char)));
+      line.notes.push(createSign(judgeSignType(char)));
     } else if (state === "modifier") {
       if (targetState === "note") {
         if (currentNote?.cate !== "Note")
-          parserWarn(
+          warn(
             `Internal Error: Target is Note but found ${currentNote?.cate}`,
             index,
             input
@@ -379,11 +391,7 @@ function parseLine(input: string) {
               currentNote.duration *= 2;
               break;
             default:
-              parserWarn(
-                `Modifier Error: Unknown modifier '${char}'`,
-                index,
-                input
-              );
+              warn(`Modifier Error: Unknown modifier '${char}'`, index, input);
               break;
           }
       } else if (targetState === "barline" && currentBarline !== undefined) {
@@ -397,14 +405,14 @@ function parseLine(input: string) {
           // "| +*"
           currentBarline.type = "invisible";
         else
-          parserWarn(
+          warn(
             `Barline Error: Unexpected modifier '${char}' after barline ${currentBarline.type}`,
             index,
             input
           );
       } else
-        parserWarn(
-          `Modifier Error: Unexpected modifier ${char} after ${targetState}`,
+        warn(
+          `Modifier Error: Unexpected modifier '${char}' after ${targetState}`,
           index,
           input
         );
@@ -412,18 +420,13 @@ function parseLine(input: string) {
       if (currentBarline === undefined) {
         if (char === "|")
           // "|"
-          currentBarline = {
-            cate: "Barline",
-            type: "normal",
-            ornaments: [],
-          };
-        else if (char === ":" && input[index + 1] === "|")
+          currentBarline = createBarline("normal");
+        else if (char === ":") {
           // ":|"
-          currentBarline = {
-            cate: "Barline",
-            type: "repeat-right",
-            ornaments: [],
-          };
+          if (input[index + 1] === "|")
+            currentBarline = createBarline("repeat-right");
+          else warn("Barline Error: Unexpected ':' without '|'", index, input);
+        }
       } else {
         if (char === "|") {
           if (currentBarline.type === "normal")
@@ -433,7 +436,7 @@ function parseLine(input: string) {
             // ":|"
             currentBarline.type = "repeat-right";
           else
-            parserWarn(
+            warn(
               `Barline Error: Unexpected '|' after complete barline ${currentBarline.type}`,
               index,
               input
@@ -446,7 +449,7 @@ function parseLine(input: string) {
             // ":|:"
             currentBarline.type = "repeat-double";
           else
-            parserWarn(
+            warn(
               `Barline Error: Unexpected ':' after complete barline ${currentBarline.type}`,
               index,
               input
@@ -468,7 +471,7 @@ fs.writeFileSync(
   "./data.json",
   JSON.stringify(
     parseLine(
-      "0/&zkh 1'/ 7/&mf 6/ | 5/ 4/ 3/ 2/ |&ty 1/ 2// 3// 4// 5// 6// 7// | 1'/ 5/ 1'/ 0/&ykh | 5 6 | 5/ 3. | 5,/ 1/ 4/ 3/ |"
+      "0/&zkh 1'/ 7/&mf 6/ :| 5/ 4/ 3/ 2/ ~ |&ty 1/ 2// 3// 4// 5// 6// 7// | 1'/ 5/ 1'/ 0/&ykh :| 5 6 | 5/ 3. | 5,/ 1/ 4/ 3/ |"
     )
   )
 );
