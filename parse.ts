@@ -1,3 +1,7 @@
+/*
+ * 将脚本内容解析为对象。
+ */
+
 /** 描述头 */
 type Metadata = {
   /**
@@ -476,4 +480,4 @@ fs.writeFileSync(
   )
 );
 
-export function draw(input: string) {}
+export function parse(input: string) {}
