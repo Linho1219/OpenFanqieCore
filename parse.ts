@@ -320,12 +320,13 @@ function judgeSignType(char: string) {
  *  @param index 出错位置
  *  @param source 来源字符串
  */
-function warn(
-  content: string,
-  index: number,
-  source: string,
-  length: number = 1
-) {
+
+interface warnPos {
+  source: string;
+  index: number;
+  length?: number;
+}
+function warn(content: string, { source, index, length = 1 }: warnPos) {
   console.warn(
     `${content} @ char ${index}\n  source: ${source}\n${" ".repeat(
       index + 10
@@ -336,28 +337,18 @@ function warn(
 /** 编译一个旋律行 */
 function parseLine(input: string) {
   input = input.replaceAll("&a tempo", "&atempo");
-  /** 当前行编译出的对象 */
   let line: Line = {
     notes: [],
   };
-  /** 当前状态 */
-  let state: State = "space";
-  /** 上一个字符的状态 */
-  let lastState: State = "space";
-  /** 上一个单位（非空格非修饰符）的状态 */
-  let targetState: State = "space";
-  /** 当前处理的音符 */
-  let currentNote: Note | undefined = undefined;
-  /** 当前处理的符号 */
-  let currentSign: Sign | undefined = undefined;
-  /** 当前处理的命令 */
-  let currentCommand = "";
-
-  /** 当前处理的小节线 */
-  let currentBarline: Barline | undefined = undefined;
+  let state: State = "space",
+    lastState: State = "space",
+    targetState: State = "space";
+  let currentNote: Note | undefined = undefined,
+    currentSign: Sign | undefined = undefined,
+    currentBarline: Barline | undefined = undefined,
+    currentCommand = "";
 
   for (let index = 0; index < input.length; index++) {
-    /** 当前字符 */
     let char = input[index];
 
     // 维护状态
@@ -396,10 +387,12 @@ function parseLine(input: string) {
           line.notes.push(createSign("parenthese-right"));
         else
           warn(
-            `Command Error: Command '${currentCommand}' registered as Sign but failed to find implement`,
-            index - currentCommand.length,
-            input,
-            currentCommand.length
+            `Internal Error: Command '${currentCommand}' registered as Sign but failed to find implement`,
+            {
+              source: input,
+              index: index - currentCommand.length,
+              length: currentCommand.length,
+            }
           );
       } else if (
         line.notes.at(-1)?.cate === "Note" &&
@@ -422,12 +415,11 @@ function parseLine(input: string) {
             line.notes.at(-1)?.cate
           }`;
         else warnStr = `Unknown command '${currentCommand}'`;
-        warn(
-          "Command Error: " + warnStr,
-          index - currentCommand.length,
-          input,
-          currentCommand.length
-        );
+        warn("Command Error: " + warnStr, {
+          source: input,
+          index: index - currentCommand.length,
+          length: currentCommand.length,
+        });
       }
       currentCommand = "";
       targetState = "command";
@@ -437,18 +429,25 @@ function parseLine(input: string) {
     if (state === "command")
       if (char === "&") {
         if (currentCommand === "") currentCommand = "&";
-        else warn("Command Error: Unexpected '&' in command", index, input);
+        else
+          warn("Command Error: Unexpected '&' in command", {
+            source: input,
+            index,
+          });
       } else {
         if (currentCommand.slice(0, 1) === "&") currentCommand += char;
-        else warn("Command Error: Missing '&' before command", index, input);
+        else
+          warn("Command Error: Missing '&' before command", {
+            source: input,
+            index,
+          });
       }
     else if (state === "note") {
       if (currentNote !== undefined)
-        warn(
-          `Internal Error: Unpushed Note ${currentNote.pitch}`,
+        warn(`Internal Error: Unpushed Note ${currentNote.pitch}`, {
+          source: input,
           index,
-          input
-        );
+        });
       currentNote = createNote(char);
     } else if (state === "sign") {
       line.notes.push(createSign(judgeSignType(char)));
@@ -457,8 +456,7 @@ function parseLine(input: string) {
         if (currentNote?.cate !== "Note")
           warn(
             `Internal Error: Target is Note but found ${currentNote?.cate}`,
-            index,
-            input
+            { source: input, index }
           );
         else
           switch (char) {
@@ -484,7 +482,10 @@ function parseLine(input: string) {
               currentNote.duration *= 2;
               break;
             default:
-              warn(`Modifier Error: Unknown modifier '${char}'`, index, input);
+              warn(`Modifier Error: Unknown modifier '${char}'`, {
+                source: input,
+                index,
+              });
               break;
           }
       } else if (targetState === "barline" && currentBarline !== undefined) {
@@ -500,14 +501,12 @@ function parseLine(input: string) {
         else
           warn(
             `Barline Error: Unexpected modifier '${char}' after barline ${currentBarline.type}`,
-            index,
-            input
+            { source: input, index }
           );
       } else
         warn(
           `Modifier Error: Unexpected modifier '${char}' after ${targetState}`,
-          index,
-          input
+          { source: input, index }
         );
     } else if (state === "barline") {
       if (currentBarline === undefined) {
@@ -518,7 +517,11 @@ function parseLine(input: string) {
           // ":|"
           if (input[index + 1] === "|")
             currentBarline = createBarline("repeat-right");
-          else warn("Barline Error: Unexpected ':' without '|'", index, input);
+          else
+            warn("Barline Error: Unexpected ':' without '|'", {
+              source: input,
+              index,
+            });
         }
       } else {
         if (char === "|") {
@@ -531,8 +534,7 @@ function parseLine(input: string) {
           else
             warn(
               `Barline Error: Unexpected '|' after complete barline ${currentBarline.type}`,
-              index,
-              input
+              { source: input, index }
             );
         } else if (char === ":") {
           if (currentBarline.type === "normal")
@@ -544,18 +546,19 @@ function parseLine(input: string) {
           else
             warn(
               `Barline Error: Unexpected ':' after complete barline ${currentBarline.type}`,
-              index,
-              input
+              { source: input, index }
             );
         }
       }
     }
   }
+  // 收尾：最后一个对象没 push
   if (targetState === "note" && currentNote !== undefined)
     line.notes.push(currentNote);
   else if (targetState === "sign" && currentSign !== undefined)
     line.notes.push(currentSign);
-  else if (targetState === "barline") line.notes.push(currentBarline!);
+  else if (targetState === "barline" && currentBarline !== undefined)
+    line.notes.push(currentBarline);
   return line;
 }
 
@@ -569,4 +572,4 @@ fs.writeFileSync(
   )
 );
 
-export function parse(input: string) {}
+export function parse(code: string, config: RawPageConfig) {}
