@@ -20,12 +20,14 @@ type Metadata = {
    *  两个数字分别是分子和分母。*/
   meter?: [number, number];
   /** J-节拍
-   *  文字表述，原样输出。*/
-  tempo?: string;
-  /** J-节拍：
-   *  数字输入，判断为 BPM。*/
-  bpm?: number;
+   *  文字表述，原样输出；数字输入，判断为 BPM。*/
+  tempo?: string | number;
 };
+
+const METADATA_PREFIX = ["V", "B", "Z", "D", "P", "J"];
+
+const formatMode = (mode: string) =>
+  mode[0] + (mode[1] === "#" ? "♯" : "") + (mode[1] === "$" ? "♭" : "");
 
 /** 原始字体格式 */
 type RawFontFamily = "Microsoft YaHei" | "SimSun" | "SimHei" | "KaiTi";
@@ -287,34 +289,6 @@ type Line = {
   marks?: [];
 };
 
-function divideScript(raw: string) {}
-
-/** 当前字符状态 */
-type State = "space" | "note" | "sign" | "modifier" | "barline" | "command";
-
-/** 判断当前字符性质 */
-function judgeState(char: string) {
-  if (char === " ") return "space";
-  if (char.match(/[a-z&+]/) !== null) return "command";
-  if (["0", "1", "2", "3", "4", "5", "6", "7", "9"].includes(char))
-    return "note";
-  if (["8", "-"].includes(char)) return "sign";
-  if (["|", ":"].includes(char)) return "barline";
-  return "modifier";
-}
-
-/** 判断当前 sign 类型 */
-function judgeSignType(char: string) {
-  switch (char) {
-    case "-":
-      return "fermata";
-    case "8":
-      return "invisible";
-    default:
-      return "invisible";
-  }
-}
-
 /** 在控制台打印警告
  *  @param content 报错内容
  *  @param index 出错位置
@@ -333,9 +307,104 @@ function warn(content: string, { source, index, length = 1 }: warnPos) {
     )}${"^".repeat(length)}`
   );
 }
+type RawLine = {
+  multi: false;
+  rawLine: string;
+  rawLyric: Array<string>;
+};
+type RawLineMulti = {
+  multi: true;
+  rawLine: Array<string>;
+  rawLyric: Array<string>;
+};
+type divideResult = { metadata: Metadata; rawPages: Array<Array<RawLine>> };
+
+/** 将脚本源代码转换为 Metadata 和 RawLine */
+function divideScript(code: string): divideResult {
+  code.replaceAll("&hh&", "\n"); // 原版前端用 &hh& 表示换行符
+  let arr = code.split("\n");
+  let metadata: Metadata = {
+    title: [],
+    author: [],
+  };
+  let currentPage: Array<RawLine> = [],
+    pageResult: Array<Array<RawLine>> = [];
+  for (let raw of arr) {
+    if (raw.at(0) === "#") continue; // 注释行
+    let prefix = raw.match(/^([A-Z0-9]+):/)?.[1];
+    if (prefix === undefined) {
+      warn("Prefix Error: Preifx missing", { source: raw, index: 0 });
+    } else if (METADATA_PREFIX.includes(prefix)) {
+      // 描述头部分
+      let data = raw.slice(prefix.length + 1).trim();
+      switch (prefix) {
+        case "V":
+          if (metadata.version !== undefined)
+            warn(
+              `Prefix Error: Version code already defined as '${metadata.version}'`,
+              { source: raw, index: 0, length: raw.length }
+            );
+          metadata.version = data;
+          break;
+        case "B":
+          metadata.title.push(data);
+          break;
+        case "Z":
+          metadata.author.push(data);
+          break;
+        case "D":
+          if (metadata.mode !== undefined)
+            warn(
+              `Prefix Error: Mode already defined as ${formatMode(
+                metadata.mode
+              )}`,
+              { source: raw, index: 0, length: raw.length }
+            );
+          else if (data.match(/^[A-G][#$]?$/) !== null) metadata.mode = data;
+          else
+            warn(`Prefix Error: Illegal mode expression '${data}'`, {
+              source: raw,
+              index: prefix.length + 1,
+              length: raw.length - prefix.length - 1,
+            });
+          break;
+        case "P":
+          if (isNaN(Number(data))) metadata.tempo = data;
+          else metadata.tempo = Number(data);
+      }
+    }
+  }
+}
 
 /** 编译一个旋律行 */
 function parseLine(input: string) {
+  /** 当前字符状态 */
+  type State = "space" | "note" | "sign" | "modifier" | "barline" | "command";
+
+  /** 判断当前字符性质 */
+  function judgeState(char: string) {
+    if (char === " ") return "space";
+    if (char.match(/[a-z&+]/) !== null) return "command";
+    if (["0", "1", "2", "3", "4", "5", "6", "7", "9"].includes(char))
+      return "note";
+    if (["8", "-"].includes(char)) return "sign";
+    if (["|", ":"].includes(char)) return "barline";
+    return "modifier";
+  }
+
+  /** 判断当前 sign 类型 */
+  function judgeSignType(char: string) {
+    switch (char) {
+      case "-":
+        return "fermata";
+      case "8":
+        return "invisible";
+      default:
+        return "invisible";
+    }
+  }
+
+  // 原版同时支持 &atempo 和 &a tempo，后者解析难做，故用替换的方法 hack
   input = input.replaceAll("&a tempo", "&atempo");
   let line: Line = {
     notes: [],
