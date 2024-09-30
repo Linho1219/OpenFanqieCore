@@ -4,49 +4,136 @@
 
 /** 描述头 */
 type Metadata = {
-  /**
-   * V-版本号
-   *
-   * 用来指定当前谱脚本是使用哪个版本的脚本规范，主要是因为后期可能会对脚本规范进行调整，衍生出不同的版本规范。
-   */
+  /** V-版本号：
+   *  用来指定当前谱脚本是使用哪个版本的脚本规范，主要是因为后期可能会对脚本规范进行调整，衍生出不同的版本规范。*/
   version?: string;
-  /**
-   * B-标题
-   *
-   * B 字段可多次出现。第一次出现将被认为是主标题，第二次以后出现的被认为是附标题。
-   */
+  /** B-标题：
+   *  B 字段可多次出现。第一次出现将被认为是主标题，第二次以后出现的被认为是附标题。*/
   title: Array<string>;
-  /**
-   * Z-作者
-   *
-   * Z 字段可多次出现。作者分别由上到下地居右显示。
-   */
+  /** Z-作者：
+   *  Z 字段可多次出现。作者分别由上到下地居右显示。*/
   author: Array<string>;
-  /**
-   * D-调式
-   *
-   * 调式必须是一个大写字母，在字母后面可以加“#”或“$”表示升降调。
-   */
+  /** D-调式：
+   *  调式必须是一个大写字母，在字母后面可以加“#”或“$”表示升降调。*/
   mode?: string;
-  /**
-   * P-拍号
-   *
-   * 两个数字分别是分子和分母。
-   */
+  /** P-拍号：
+   *  两个数字分别是分子和分母。*/
   meter?: [number, number];
-  /**
-   * J-节拍
-   *
-   * 文字表述，原样输出。
-   */
+  /** J-节拍
+   *  文字表述，原样输出。*/
   tempo?: string;
-  /**
-   * J-节拍
-   *
-   * 数字输入，判断为 BPM。
-   */
+  /** J-节拍：
+   *  数字输入，判断为 BPM。*/
   bpm?: number;
 };
+
+/** 原始字体格式 */
+type RawFontFamily = "Microsoft YaHei" | "SimSun" | "SimHei" | "KaiTi";
+
+/** 原始页面设置 */
+type RawPageConfig = {
+  /** 页面大小 */
+  page: "A4" | "A5" | "A4_horizontal" | "A5_horizontal";
+  /** 上边距 */
+  margin_top: string;
+  /** 下边距 */
+  margin_bottom: string;
+  /** 左边距 */
+  margin_left: string;
+  /** 右边距 */
+  margin_right: string;
+  /** 标题字体 */
+  biaoti_font: RawFontFamily;
+  /** 数字字体 现代/罗马/经典 */
+  shuzi_font: "a" | "b" | "c";
+  /** 歌词字体 */
+  geci_font: RawFontFamily;
+  /** 曲的下间距 */
+  height_quci: string;
+  /** 词的下间距 */
+  height_cici: string;
+  /** 曲的上间距 */
+  height_ciqu: string;
+  /** 多声部额外间距 */
+  height_shengbu: string;
+  /** 标题字号 */
+  biaoti_size: string;
+  /** 副标题字号 */
+  fubiaoti_size: string;
+  /** 歌词字号 */
+  geci_size: string;
+  /** 正文上间距 */
+  body_margin_top: string;
+  /** 连音线样式 */
+  lianyinxian_type: "0" | "1" | "2";
+};
+
+type FontConfig = {
+  /** 字体家族 */
+  fontFamily: string;
+  /** 字号 */
+  fontSize: number;
+};
+
+/** 页面设置 */
+type PageConfig = {
+  size: {
+    height: number;
+    width: number;
+  };
+  margin: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+    topExtra: number;
+  };
+  title: FontConfig;
+  subtitle: FontConfig;
+  lyric: FontConfig;
+  /** 音符数字样式 */
+  note: "modern" | "roman" | "classic";
+  /** 连音线样式 */
+  slur: "auto" | "arc" | "flat";
+};
+
+const PAGE_PRESETS = {
+  A4: { width: 1000, height: 1415 },
+  A5: { width: 840, height: 1193 },
+  A4_horizontal: { width: 1415, height: 1000 },
+  A5_horizontal: { width: 1193, height: 840 },
+};
+
+function translatePageConfig(raw: RawPageConfig): PageConfig {
+  return {
+    size: PAGE_PRESETS[raw.page],
+    margin: {
+      top: Number(raw.margin_top),
+      right: Number(raw.margin_right),
+      bottom: Number(raw.margin_bottom),
+      left: Number(raw.margin_left),
+      topExtra: Number(raw.body_margin_top),
+    },
+    title: {
+      fontFamily: raw.biaoti_font,
+      fontSize: Number(raw.biaoti_size),
+    },
+    subtitle: {
+      fontFamily: raw.biaoti_font,
+      fontSize: Number(raw.fubiaoti_size),
+    },
+    lyric: {
+      fontFamily: raw.geci_font,
+      fontSize: Number(raw.geci_size),
+    },
+    note: <"modern" | "roman" | "classic">(
+      { a: "modern", b: "roman", c: "classic" }[raw.shuzi_font]
+    ),
+    slur: <"auto" | "arc" | "flat">(
+      ["auto", "arc", "flat"][raw.lianyinxian_type]
+    ),
+  };
+}
 
 /** 音符和休止符 */
 type Note = {
@@ -199,6 +286,8 @@ type Line = {
   notes: Array<Note | Sign | Barline>;
   marks?: [];
 };
+
+function divideScript(raw: string) {}
 
 /** 当前字符状态 */
 type State = "space" | "note" | "sign" | "modifier" | "barline" | "command";
