@@ -289,18 +289,36 @@ type Line = {
   marks?: [];
 };
 
-/** 在控制台打印警告
- *  @param content 报错内容
- *  @param index 出错位置
- *  @param source 来源字符串
- */
-
 interface warnPos {
   source: string;
-  index: number;
+  index?: number;
   length?: number;
+  lastIndex?: number;
 }
-function warn(content: string, { source, index, length = 1 }: warnPos) {
+
+/** 在控制台打印警告 */
+function warn(content: string, { source, index, length, lastIndex }: warnPos) {
+  if (index !== undefined && length !== undefined && lastIndex === undefined) {
+    // 无需调整
+  } else if (
+    index !== undefined &&
+    length === undefined &&
+    lastIndex === undefined
+  ) {
+    length = 1;
+  } else if (
+    index !== undefined &&
+    length === undefined &&
+    lastIndex !== undefined
+  ) {
+    length = lastIndex - index;
+  } else if (
+    index === undefined &&
+    length !== undefined &&
+    lastIndex !== undefined
+  ) {
+    index = lastIndex - length;
+  } else throw new Error("Internal Error: Bad warning");
   console.warn(
     `${content} @ char ${index}\n  source: ${source}\n${" ".repeat(
       index + 10
@@ -320,7 +338,8 @@ type RawLineMulti = {
 type divideResult = { metadata: Metadata; rawPages: Array<Array<RawLine>> };
 
 /** 将脚本源代码转换为 Metadata 和 RawLine */
-function divideScript(code: string): divideResult {
+function divideScript(code: string) {
+  ///////////
   code.replaceAll("&hh&", "\n"); // 原版前端用 &hh& 表示换行符
   let arr = code.split("\n");
   let metadata: Metadata = {
@@ -364,14 +383,16 @@ function divideScript(code: string): divideResult {
           else
             warn(`Prefix Error: Illegal mode expression '${data}'`, {
               source: raw,
-              index: prefix.length + 1,
-              length: raw.length - prefix.length - 1,
+              index: prefix.length,
+              lastIndex: raw.length,
             });
           break;
         case "P":
           if (isNaN(Number(data))) metadata.tempo = data;
           else metadata.tempo = Number(data);
       }
+    } else {
+      ///歌词旋律处理
     }
   }
 }
@@ -412,10 +433,10 @@ function parseLine(input: string) {
   let state: State = "space",
     lastState: State = "space",
     targetState: State = "space";
-  let currentNote: Note | undefined = undefined,
-    currentSign: Sign | undefined = undefined,
-    currentBarline: Barline | undefined = undefined,
-    currentCommand = "";
+  // let currentNote: Note | undefined = undefined,
+  //   currentSign: Sign | undefined = undefined,
+  //   currentBarline: Barline | undefined = undefined;
+  let currentCommand = "";
 
   for (let index = 0; index < input.length; index++) {
     let char = input[index];
@@ -426,27 +447,6 @@ function parseLine(input: string) {
     if (!["space", "modifier", "command"].includes(lastState))
       targetState = lastState;
 
-    // 结算
-    // 小节线结算：小节线之后，非修饰符或空格，或 & 命令开始
-    if (
-      (targetState === "barline" &&
-        !["barline", "modifier", "space", "command"].includes(state)) ||
-      char === "&"
-    ) {
-      if (typeof currentBarline !== "undefined")
-        line.notes.push(currentBarline);
-      currentBarline = undefined;
-    }
-    // 音符/符号结算：非修饰符或空格，或 & 命令开始
-    if (!["modifier", "space", "command"].includes(state) || char === "&") {
-      if (currentNote !== undefined) {
-        line.notes.push(currentNote);
-        currentNote = undefined;
-      } else if (currentSign !== undefined) {
-        line.notes.push(currentSign);
-        currentSign = undefined;
-      }
-    }
     // 命令结算
     if (state !== "command" && currentCommand !== "") {
       let command = currentCommand.slice(1);
@@ -459,7 +459,7 @@ function parseLine(input: string) {
             `Internal Error: Command '${currentCommand}' registered as Sign but failed to find implement`,
             {
               source: input,
-              index: index - currentCommand.length,
+              lastIndex: index,
               length: currentCommand.length,
             }
           );
@@ -486,7 +486,7 @@ function parseLine(input: string) {
         else warnStr = `Unknown command '${currentCommand}'`;
         warn("Command Error: " + warnStr, {
           source: input,
-          index: index - currentCommand.length,
+          lastIndex: index,
           length: currentCommand.length,
         });
       }
@@ -495,6 +495,7 @@ function parseLine(input: string) {
     }
 
     // 进入字符判断流程
+    let lastToken = line.notes.at(-1);
     if (state === "command")
       if (char === "&") {
         if (currentCommand === "") currentCommand = "&";
@@ -512,80 +513,74 @@ function parseLine(input: string) {
           });
       }
     else if (state === "note") {
-      if (currentNote !== undefined)
-        warn(`Internal Error: Unpushed Note ${currentNote.pitch}`, {
-          source: input,
-          index,
-        });
-      currentNote = createNote(char);
+      line.notes.push(createNote(char));
     } else if (state === "sign") {
       line.notes.push(createSign(judgeSignType(char)));
     } else if (state === "modifier") {
-      if (targetState === "note") {
-        if (currentNote?.cate !== "Note")
-          warn(
-            `Internal Error: Target is Note but found ${currentNote?.cate}`,
-            { source: input, index }
-          );
-        else
-          switch (char) {
-            case ",": // 下加一点
-              currentNote.range -= 1;
-              break;
-            case "'": // 上加一点
-              currentNote.range += 1;
-              break;
-            case "#": // 升号
-              currentNote.accidental = "sharp";
-              break;
-            case "$": // 降号
-              currentNote.accidental = "flat";
-              break;
-            case "=": // 还原号
-              currentNote.accidental = "natural";
-              break;
-            case ".": // 附点
-              currentNote.dot++;
-              break;
-            case "/": // 时值线
-              currentNote.duration *= 2;
-              break;
-            default:
-              warn(`Modifier Error: Unknown modifier '${char}'`, {
-                source: input,
-                index,
-              });
-              break;
-          }
-      } else if (targetState === "barline" && currentBarline !== undefined) {
-        if (char === "/" && currentBarline.type === "normal")
+      if (lastToken === undefined)
+        warn(
+          `Modifier Error: Unexpected modifier '${char}' at the beginning of a line`,
+          { source: input, index }
+        );
+      else if (lastToken.cate === "Note") {
+        switch (char) {
+          case ",": // 下加一点
+            lastToken.range -= 1;
+            break;
+          case "'": // 上加一点
+            lastToken.range += 1;
+            break;
+          case "#": // 升号
+            lastToken.accidental = "sharp";
+            break;
+          case "$": // 降号
+            lastToken.accidental = "flat";
+            break;
+          case "=": // 还原号
+            lastToken.accidental = "natural";
+            break;
+          case ".": // 附点
+            lastToken.dot++;
+            break;
+          case "/": // 时值线
+            lastToken.duration *= 2;
+            break;
+          default:
+            warn(
+              `Modifier Error: Unexpected modifier '${char}' after ${lastToken.type}`,
+              { source: input, index }
+            );
+            break;
+        }
+      } else if (lastToken.cate === "Barline") {
+        if (char === "/" && lastToken.type === "normal")
           // "| +/"
-          currentBarline.type = "hidden";
-        else if (char === "/" && currentBarline.type === "end")
+          lastToken.type = "hidden";
+        else if (char === "/" && lastToken.type === "end")
           // "|| +/"
-          currentBarline.type = "double";
-        else if (char === "*" && currentBarline.type === "normal")
+          lastToken.type = "double";
+        else if (char === "*" && lastToken.type === "normal")
           // "| +*"
-          currentBarline.type = "invisible";
+          lastToken.type = "invisible";
         else
           warn(
-            `Barline Error: Unexpected modifier '${char}' after barline ${currentBarline.type}`,
+            `Modifier Error: Unexpected modifier '${char}' after barline ${lastToken.type}`,
             { source: input, index }
           );
       } else
         warn(
-          `Modifier Error: Unexpected modifier '${char}' after ${targetState}`,
+          `Modifier Error: Unexpected modifier '${char}' after ${lastToken.cate}`,
           { source: input, index }
         );
     } else if (state === "barline") {
-      if (currentBarline === undefined) {
+      if (lastToken === undefined || lastToken.cate !== "Barline") {
         if (char === "|")
           // "|"
-          currentBarline = createBarline("normal");
+          line.notes.push(createBarline("normal"));
         else if (char === ":") {
           // ":|"
           if (input[index + 1] === "|")
-            currentBarline = createBarline("repeat-right");
+            line.notes.push(createBarline("repeat-right"));
           else
             warn("Barline Error: Unexpected ':' without '|'", {
               source: input,
@@ -594,40 +589,33 @@ function parseLine(input: string) {
         }
       } else {
         if (char === "|") {
-          if (currentBarline.type === "normal")
+          if (lastToken.type === "normal")
             // "||"
-            currentBarline.type = "end";
-          else if (currentBarline.type === "repeat-right")
+            lastToken.type = "end";
+          else if (lastToken.type === "repeat-right")
             // ":|"
-            currentBarline.type = "repeat-right";
+            lastToken.type = "repeat-right";
           else
             warn(
-              `Barline Error: Unexpected '|' after complete barline ${currentBarline.type}`,
+              `Barline Error: Unexpected '|' after complete barline ${lastToken.type}`,
               { source: input, index }
             );
         } else if (char === ":") {
-          if (currentBarline.type === "normal")
+          if (lastToken.type === "normal")
             // "|:"
-            currentBarline.type = "repeat-left";
-          else if (currentBarline.type === "repeat-right")
+            lastToken.type = "repeat-left";
+          else if (lastToken.type === "repeat-right")
             // ":|:"
-            currentBarline.type = "repeat-double";
+            lastToken.type = "repeat-double";
           else
             warn(
-              `Barline Error: Unexpected ':' after complete barline ${currentBarline.type}`,
+              `Barline Error: Unexpected ':' after complete barline ${lastToken.type}`,
               { source: input, index }
             );
         }
       }
     }
   }
-  // 收尾：最后一个对象没 push
-  if (targetState === "note" && currentNote !== undefined)
-    line.notes.push(currentNote);
-  else if (targetState === "sign" && currentSign !== undefined)
-    line.notes.push(currentSign);
-  else if (targetState === "barline" && currentBarline !== undefined)
-    line.notes.push(currentBarline);
   return line;
 }
 
@@ -636,7 +624,7 @@ fs.writeFileSync(
   "./data.json",
   JSON.stringify(
     parseLine(
-      "0/&zkh 1'/ 7/&mf 6/ :| 5/ 4/ 3/ 2/ ~ |&ty 1/ 2// 3// 4// 5// 6// 7// | 1'/ 5/ 1'/ 0/&ykh :| 5 6 | 5/ 3. | 5,/ 1/ 4/ 3/ |"
+      "0/&zkh 1'/ 7/ &sfp 6/ :| 5/ 4/ 3/ 2/ |&ty 1/ 2// 3// 4// 5// 6// 7// | 1'/ 5/ 1'/ 0/&ykh :| 5 6 | 5/ 3. | 5,/ 1/ 4/ 3/ |"
     )
   )
 );
