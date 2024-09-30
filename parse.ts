@@ -190,59 +190,37 @@ const NOTE_ORN_LIST = [
 ];
 
 /** 新建音符/休止符 */
-function createNote(char?: string): Note {
-  if (typeof char === "undefined")
-    return {
-      cate: "Note",
-      type: "note",
-      pitch: -1,
-      range: 0,
-      duration: 4,
-      dot: 0,
-      accidental: "none",
-      ornaments: [],
-    };
-  else
-    return {
-      cate: "Note",
-      type: char === "0" ? "rest" : "note",
-      pitch: Number(char),
-      range: 0,
-      duration: 4,
-      dot: 0,
-      accidental: "none",
-      ornaments: [],
-    };
-}
+const createNote = (char: string): Note => ({
+  cate: "Note",
+  type: char === "0" ? "rest" : "note",
+  pitch: Number(char),
+  range: 0,
+  duration: 4,
+  dot: 0,
+  accidental: "none",
+  ornaments: [],
+});
+
+type SignType =
+  | "fermata"
+  | "invisible"
+  | "meter"
+  | "parenthese-left"
+  | "parenthese-right";
 
 /** 在谱面中与音符所占位置相同的记号 */
 type Sign = {
   cate: "Sign";
-  /** 符号类型 */
-  type:
-    | "fermata"
-    | "invisible"
-    | "meter"
-    | "parenthese-left"
-    | "parenthese-right";
+  type: SignType;
   meter?: [number, number];
   ornaments: Array<string>;
 };
 
-function createSign(
-  type:
-    | "fermata"
-    | "invisible"
-    | "meter"
-    | "parenthese-left"
-    | "parenthese-right"
-): Sign {
-  return {
-    cate: "Sign",
-    type,
-    ornaments: [],
-  };
-}
+const createSign = (type: SignType): Sign => ({
+  cate: "Sign",
+  type,
+  ornaments: [],
+});
 
 /** 在谱面中标记在音符上的记号 */
 type Mark = {};
@@ -335,10 +313,10 @@ type RawLineMulti = {
   rawLine: Array<string>;
   rawLyric: Array<string>;
 };
-type divideResult = { metadata: Metadata; rawPages: Array<Array<RawLine>> };
+type DivideResult = { metadata: Metadata; rawPages: Array<Array<RawLine>> };
 
 /** 将脚本源代码转换为 Metadata 和 RawLine */
-function divideScript(code: string) {
+function divideScript(code: string): DivideResult {
   ///////////
   code.replaceAll("&hh&", "\n"); // 原版前端用 &hh& 表示换行符
   let arr = code.split("\n");
