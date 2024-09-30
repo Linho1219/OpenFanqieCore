@@ -317,7 +317,6 @@ type DivideResult = { metadata: Metadata; rawPages: Array<Array<RawLine>> };
 
 /** 将脚本源代码转换为 Metadata 和 RawLine */
 function divideScript(code: string): DivideResult {
-  ///////////
   code.replaceAll("&hh&", "\n"); // 原版前端用 &hh& 表示换行符
   const arr = code.split("\n");
   const metadata: Metadata = {
@@ -445,56 +444,64 @@ function parseLine(input: string) {
   const line: Line = {
     notes: [],
   };
-  let currentCommand = "";
+  let currentCmd = "";
 
   for (let index = 0; index < input.length; index++) {
     const char = input[index],
       state: State = judgeState(char);
 
     // 命令结算
-    if (state !== "command" && currentCommand !== "") {
-      const command = currentCommand.slice(1);
+    if (state !== "command" && currentCmd !== "") {
+      const command = currentCmd.slice(1),
+        lastToken = line.notes.at(-1);
       if (SIGN_CMD_LIST.includes(command)) {
         if (command === "zkh") line.notes.push(createSign("parenthese-left"));
         else if (command === "ykh")
           line.notes.push(createSign("parenthese-right"));
         else
           warn(
-            `Internal Error: Command '${currentCommand}' registered as Sign but failed to find implement`,
+            `Internal Error: Command '${currentCmd}' registered as Sign but failed to find implement`,
             {
               source: input,
               lastIndex: index,
-              length: currentCommand.length,
+              length: currentCmd.length,
             }
           );
-      } else if (
-        line.notes.at(-1)?.cate === "Note" &&
-        NOTE_ORN_LIST.includes(command)
-      ) {
-        line.notes.at(-1)!.ornaments.push(command);
-      } else if (
-        line.notes.at(-1)?.cate === "Barline" &&
-        BARLINE_ORN_LIST.includes(command)
-      ) {
-        line.notes.at(-1)!.ornaments.push(command);
+      } else if (lastToken !== undefined) {
+        if (lastToken.cate === "Note" && NOTE_ORN_LIST.includes(command)) {
+          lastToken.ornaments.push(command);
+        } else if (
+          lastToken.cate === "Barline" &&
+          BARLINE_ORN_LIST.includes(command)
+        ) {
+          lastToken.ornaments.push(command);
+        } else {
+          let warnStr;
+          if (NOTE_ORN_LIST.includes(command))
+            warnStr = `Command '${currentCmd}' should be used after note or rest, but found ${lastToken?.cate}`;
+          else if (BARLINE_ORN_LIST.includes(command))
+            warnStr = `Command '${currentCmd}' should be used after barline, but found ${lastToken?.cate}`;
+          else warnStr = `Unknown command '${currentCmd}'`;
+          warn("Command Error: " + warnStr, {
+            source: input,
+            lastIndex: index,
+            length: currentCmd.length,
+          });
+        }
       } else {
         let warnStr;
-        if (NOTE_ORN_LIST.includes(command))
-          warnStr = `Command '${currentCommand}' should be used after note or rest, but found ${
-            line.notes.at(-1)?.cate
-          }`;
-        else if (BARLINE_ORN_LIST.includes(command))
-          warnStr = `Command '${currentCommand}' should be used after barline, but found ${
-            line.notes.at(-1)?.cate
-          }`;
-        else warnStr = `Unknown command '${currentCommand}'`;
-        warn("Command Error: " + warnStr, {
-          source: input,
-          lastIndex: index,
-          length: currentCommand.length,
-        });
+          if (NOTE_ORN_LIST.includes(command))
+            warnStr = `Command '${currentCmd}' should be used after note or rest, but placed at the beginning`;
+          else if (BARLINE_ORN_LIST.includes(command))
+            warnStr = `Command '${currentCmd}' should be used after barline, but placed at the beginning`;
+          else warnStr = `Unknown command '${currentCmd}'`;
+          warn("Command Error: " + warnStr, {
+            source: input,
+            lastIndex: index,
+            length: currentCmd.length,
+          });
       }
-      currentCommand = "";
+      currentCmd = "";
     }
 
     // 进入字符判断流程
@@ -502,14 +509,14 @@ function parseLine(input: string) {
     const lastToken = line.notes.at(-1);
     if (state === "command")
       if (char === "&") {
-        if (currentCommand === "") currentCommand = "&";
+        if (currentCmd === "") currentCmd = "&";
         else
           warn("Command Error: Unexpected '&' in command", {
             source: input,
             index,
           });
       } else {
-        if (currentCommand.slice(0, 1) === "&") currentCommand += char;
+        if (currentCmd.slice(0, 1) === "&") currentCmd += char;
         else
           warn("Command Error: Missing '&' before command", {
             source: input,
