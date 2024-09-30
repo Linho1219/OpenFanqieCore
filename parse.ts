@@ -319,23 +319,30 @@ type DivideResult = { metadata: Metadata; rawPages: Array<Array<RawLine>> };
 function divideScript(code: string): DivideResult {
   ///////////
   code.replaceAll("&hh&", "\n"); // 原版前端用 &hh& 表示换行符
-  let arr = code.split("\n");
-  let metadata: Metadata = {
+  const arr = code.split("\n");
+  const metadata: Metadata = {
     title: [],
     author: [],
   };
-  let currentPage: Array<RawLine> = [],
-    pageResult: Array<Array<RawLine>> = [];
+  let currentPage: Array<RawLine> = [];
+  const rawPages: Array<Array<RawLine>> = [];
+  rawPages.push(currentPage);
   for (let raw of arr) {
     if (raw.at(0) === "#") continue; // 注释行
-    let prefix = raw.match(/^([A-Z0-9]+):/)?.[1];
+    if (raw === "[fenye]") {
+      // 分页符
+      currentPage = [];
+      rawPages.push(currentPage);
+      continue;
+    }
+    const prefix = raw.match(/^([A-Z0-9]+):/)?.[1];
     if (prefix === undefined) {
       warn("Prefix Error: Preifx missing", { source: raw, index: 0 });
     } else if (METADATA_PREFIX.includes(prefix)) {
       // 描述头部分
-      let data = raw.slice(prefix.length + 1).trim();
+      const data = raw.slice(prefix.length + 1).trim();
       switch (prefix) {
-        case "V":
+        case "V": {
           if (metadata.version !== undefined)
             warn(
               `Prefix Error: Version code already defined as '${metadata.version}'`,
@@ -343,13 +350,16 @@ function divideScript(code: string): DivideResult {
             );
           metadata.version = data;
           break;
-        case "B":
+        }
+        case "B": {
           metadata.title.push(data);
           break;
-        case "Z":
+        }
+        case "Z": {
           metadata.author.push(data);
           break;
-        case "D":
+        }
+        case "D": {
           if (metadata.mode !== undefined)
             warn(
               `Prefix Error: Mode already defined as ${formatMode(
@@ -365,14 +375,41 @@ function divideScript(code: string): DivideResult {
               lastIndex: raw.length,
             });
           break;
-        case "P":
+        }
+        case "P": {
+          const res = data.match(/(\d+)\s*\/\s*(\d+)/);
+          if (res !== null) {
+            metadata.meter = [Number(res[1]), Number(res[2])];
+          } else {
+            warn(`Prefix Error: Illegal meter expression '${data}'`, {
+              source: raw,
+              index: prefix.length,
+              lastIndex: raw.length,
+            });
+          }
+          break;
+        }
+        case "J": {
           if (isNaN(Number(data))) metadata.tempo = data;
           else metadata.tempo = Number(data);
+          break;
+        }
+        default: {
+          warn(
+            `Internal Error: Registered prefix ${prefix} without implement`,
+            { source: raw, index: 0, length: prefix.length }
+          );
+          break;
+        }
       }
     } else {
       ///歌词旋律处理
     }
   }
+  return {
+    metadata,
+    rawPages,
+  };
 }
 
 /** 编译一个旋律行 */
@@ -405,29 +442,18 @@ function parseLine(input: string) {
 
   // 原版同时支持 &atempo 和 &a tempo，后者解析难做，故用替换的方法 hack
   input = input.replaceAll("&a tempo", "&atempo");
-  let line: Line = {
+  const line: Line = {
     notes: [],
   };
-  let state: State = "space",
-    lastState: State = "space",
-    targetState: State = "space";
-  // let currentNote: Note | undefined = undefined,
-  //   currentSign: Sign | undefined = undefined,
-  //   currentBarline: Barline | undefined = undefined;
   let currentCommand = "";
 
   for (let index = 0; index < input.length; index++) {
-    let char = input[index];
-
-    // 维护状态
-    lastState = state;
-    state = judgeState(char);
-    if (!["space", "modifier", "command"].includes(lastState))
-      targetState = lastState;
+    const char = input[index],
+      state: State = judgeState(char);
 
     // 命令结算
     if (state !== "command" && currentCommand !== "") {
-      let command = currentCommand.slice(1);
+      const command = currentCommand.slice(1);
       if (SIGN_CMD_LIST.includes(command)) {
         if (command === "zkh") line.notes.push(createSign("parenthese-left"));
         else if (command === "ykh")
@@ -469,11 +495,11 @@ function parseLine(input: string) {
         });
       }
       currentCommand = "";
-      targetState = "command";
     }
 
     // 进入字符判断流程
-    let lastToken = line.notes.at(-1);
+    /** 上一个有意义的元素对象 */
+    const lastToken = line.notes.at(-1);
     if (state === "command")
       if (char === "&") {
         if (currentCommand === "") currentCommand = "&";
@@ -502,27 +528,41 @@ function parseLine(input: string) {
         );
       else if (lastToken.cate === "Note") {
         switch (char) {
-          case ",": // 下加一点
+          case ",": {
+            // 下加一点
             lastToken.range -= 1;
             break;
-          case "'": // 上加一点
+          }
+          case "'": {
+            // 上加一点
             lastToken.range += 1;
             break;
-          case "#": // 升号
+          }
+          case "#": {
+            // 升号
             lastToken.accidental = "sharp";
             break;
-          case "$": // 降号
+          }
+          case "$": {
+            // 降号
             lastToken.accidental = "flat";
             break;
-          case "=": // 还原号
+          }
+          case "=": {
+            // 还原号
             lastToken.accidental = "natural";
             break;
-          case ".": // 附点
+          }
+          case ".": {
+            // 附点
             lastToken.dot++;
             break;
-          case "/": // 时值线
+          }
+          case "/": {
+            // 时值线
             lastToken.duration *= 2;
             break;
+          }
           default:
             warn(
               `Modifier Error: Unexpected modifier '${char}' after ${lastToken.type}`,
