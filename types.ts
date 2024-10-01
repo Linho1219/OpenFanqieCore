@@ -221,10 +221,10 @@ export type SignType =
 /** 在谱面中与音符所占位置相同的记号 */
 export type Sign = {
   cate: "Sign";
-
   type: SignType;
   meter?: [number, number];
   ornaments?: Array<string>;
+  tuplets?:number
   index: number;
 };
 
@@ -322,5 +322,5 @@ export type State =
 
 export type Line = {
   notes: Array<Note | Sign | Barline>;
-  marks?: [];
+  marks?:Array<Mark>;
 };

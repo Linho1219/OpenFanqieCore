@@ -174,8 +174,12 @@ export function parseLine(input: string) {
     notes: [],
   };
   let curntCmd = "";
+  /** 强制跳转索引 */
   let forceJump: number | undefined = undefined;
-  let tempMark: Array<MarkReg> = [];
+  /** 括号配对栈 */
+  let parentheseStack: Array<MarkReg> = [];
+  /** 渐强渐弱配对栈 */
+  let dynamicStack: Array<MarkReg> = [];
   for (let position = 0; position < input.length; position++) {
     const char = input[position],
       state: State = judgeState(char);
@@ -187,7 +191,10 @@ export function parseLine(input: string) {
     }
 
     // 命令结算
-    if (state !== "command" && curntCmd !== "") {
+    if (
+      (state !== "command" && curntCmd !== "") ||
+      (char === "&" && curntCmd !== "")
+    ) {
       const command = curntCmd.slice(1),
         lastToken = line.notes.at(-1);
       if (SIGN_CMD_LIST.includes(command)) {
@@ -244,22 +251,22 @@ export function parseLine(input: string) {
     }
 
     const lastToken = line.notes.at(-1);
-    // Mark 类型起始特判
+    // 进入正常字符判断流程
     if (SPEC_CHAR.includes(char)) {
       switch (char) {
         case '"': {
           const quoted: string | undefined = input
             .slice(position)
-            .match(/"([^"]+)"/)?.[1];
+            .match(/^\s*"([^"]+)"/)?.[1];
           if (quoted !== undefined) {
             const lastToken = line.notes.at(-1);
             if (lastToken?.cate === "Barline") {
               const meterMatch = quoted.match(/p:(\d+)\/(\d+)/);
               if (meterMatch !== null) {
-                const [, first, second] = meterMatch;
-                const meter = createSign("meter", line.notes.length);
-                meter.meter = [Number(first), Number(second)];
-                line.notes.push(meter);
+                line.notes.push({
+                  ...createSign("meter", line.notes.length),
+                  meter: [Number(meterMatch[1]), Number(meterMatch[2])],
+                });
               } else
                 warn(`Sign Error: Illegal temporary meter format '${quoted}'`, {
                   source: input,
@@ -279,9 +286,81 @@ export function parseLine(input: string) {
               );
             }
             forceJump = position + quoted.length + 2;
-            continue;
           } else {
             warn(`Modifier Error: Unexpected '"' without closing`, {
+              source: input,
+              position,
+            });
+          }
+          break;
+        }
+        case "(": {
+          if (input[position + 1] === "y") {
+            // 连音线
+            parentheseStack.push({
+              type: "tuplets",
+              position,
+              index: line.notes.length,
+            });
+            forceJump = position + 2;
+          } else {
+            // 延音线
+            parentheseStack.push({
+              type: "legato",
+              position,
+              index: line.notes.length,
+            });
+          }
+          break;
+        }
+        case ")": {
+          const tempReg = parentheseStack.pop();
+          if (tempReg !== undefined) {
+            const begin = tempReg.index;
+            const end = line.notes.length - 1;
+            if (tempReg.index <= end) {
+              if (line.marks === undefined) line.marks = [];
+              if (tempReg.type === "tuplets") {
+                const legatoNotes = line.notes.slice(begin, end + 1);
+                if (
+                  legatoNotes.filter(
+                    (token) => token.cate !== "Note" && token.type !== "fermata"
+                  ).length === 0
+                ) {
+                  legatoNotes.forEach((token) => {
+                    if (token.cate === "Barline")
+                      throw new Error("Unexpected Barline");
+                    token.tuplets = end - begin + 1;
+                  });
+                } else {
+                  warn(
+                    `Mark Error: Tuplets should not include tokens other than notes, rests and fermata`,
+                    {
+                      source: input,
+                      position: tempReg.position,
+                      lastIndex: position,
+                    }
+                  );
+                }
+              }
+              line.marks.push({
+                cate: "Mark",
+                type: tempReg.type,
+                begin,
+                end,
+              });
+            } else {
+              warn(
+                `Mark Error: Tokens within ${tempReg.type} must be no less than 2`,
+                {
+                  source: input,
+                  position: tempReg.position,
+                  lastIndex: position,
+                }
+              );
+            }
+          } else {
+            warn(`Mark Error: Unexpected ')' without '('`, {
               source: input,
               position,
             });
@@ -293,16 +372,12 @@ export function parseLine(input: string) {
             `Internal Error: Specialized char ${char} registered without implement`,
             { source: input, position }
           );
+          break;
         }
       }
     } else if (state === "command") {
       if (char === "&") {
-        if (curntCmd === "") curntCmd = "&";
-        else
-          warn("Command Error: Unexpected '&' in command", {
-            source: input,
-            position,
-          });
+        curntCmd = "&";
       } else {
         if (curntCmd.slice(0, 1) === "&") curntCmd += char;
         else
