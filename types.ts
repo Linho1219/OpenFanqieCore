@@ -140,6 +140,7 @@ export function translatePageConfig(raw: RawPageConfig): PageConfig {
 /** 音符和休止符 */
 export type Note = {
   cate: "Note";
+  index: number;
   type: "note" | "rest";
   /** 音高，数字 1-7，休止符为 0, X 为 9*/
   pitch: Number;
@@ -150,9 +151,16 @@ export type Note = {
   /** 附点个数 */
   dot: 0 | 1 | 2;
   /** 升# 降$ 还原= */
-  accidental: "none" | "sharp" | "flat" | "natural";
+  accidental?:  "sharp" | "flat" | "natural";
   /** 装饰记号，用 & 开头 */
-  ornaments: Array<string>;
+  ornaments?: Array<string>;
+  /** 倚音 */
+  decoration?: {
+    position: "begin" | "end";
+    content: Array<Note>;
+  };
+  /** 多连音 */
+  tuplets?: number;
 };
 
 /** Sign 命令列表 */
@@ -190,15 +198,14 @@ export const NOTE_ORN_LIST = [
 ];
 
 /** 新建音符/休止符 */
-export const createNote = (char: string): Note => ({
+export const createNote = (char: string, index: number): Note => ({
   cate: "Note",
+  index,
   type: char === "0" ? "rest" : "note",
   pitch: Number(char),
   range: 0,
   duration: 4,
   dot: 0,
-  accidental: "none",
-  ornaments: [],
 });
 
 export type SignType =
@@ -211,15 +218,16 @@ export type SignType =
 /** 在谱面中与音符所占位置相同的记号 */
 export type Sign = {
   cate: "Sign";
+  index: number;
   type: SignType;
   meter?: [number, number];
-  ornaments: Array<string>;
+  ornaments?: Array<string>;
 };
 
-export const createSign = (type: SignType): Sign => ({
+export const createSign = (type: SignType, index: number): Sign => ({
   cate: "Sign",
+  index,
   type,
-  ornaments: [],
 });
 
 /** 在谱面中标记在音符上的记号 */
@@ -228,6 +236,7 @@ export type Mark = {};
 /** 小节线 */
 export type Barline = {
   cate: "Barline";
+  index: number;
   type:
     | "normal" // "|"
     | "end" // "||"
@@ -237,7 +246,7 @@ export type Barline = {
     | "repeat-double" // ":|:"
     | "hidden" // "|/"，不显示也不占据空间
     | "invisible"; // "|*"，不显示但占据空间
-  ornaments: Array<string>;
+  ornaments?: Array<string>;
 };
 
 export function createBarline(
@@ -249,17 +258,20 @@ export function createBarline(
     | "repeat-right"
     | "repeat-double"
     | "hidden"
-    | "invisible"
+    | "invisible",
+  index: number
 ): Barline {
   return {
     cate: "Barline",
+    index,
     type,
-    ornaments: [],
   };
 }
 
 /** 小节线装饰记号列表 */
 export const BARLINE_ORN_LIST = ["fine", "dc", "ds", "ty", "hs"];
+
+export   type State = "space" | "note" | "sign" | "modifier" | "barline" | "command";
 
 /** 行 */
 export type Line = {

@@ -1,36 +1,36 @@
 interface warnPos {
   source: string;
-  index?: number;
+  position?: number;
   length?: number;
   lastIndex?: number;
 }
 
 /** 在控制台打印警告 */
-export function warn(content: string, { source, index, length, lastIndex }: warnPos) {
-  if (index !== undefined && length !== undefined && lastIndex === undefined) {
+export function warn(content: string, { source, position, length, lastIndex }: warnPos) {
+  if (position !== undefined && length !== undefined && lastIndex === undefined) {
     // 无需调整
   } else if (
-    index !== undefined &&
+    position !== undefined &&
     length === undefined &&
     lastIndex === undefined
   ) {
     length = 1;
   } else if (
-    index !== undefined &&
+    position !== undefined &&
     length === undefined &&
     lastIndex !== undefined
   ) {
-    length = lastIndex - index;
+    length = lastIndex - position;
   } else if (
-    index === undefined &&
+    position === undefined &&
     length !== undefined &&
     lastIndex !== undefined
   ) {
-    index = lastIndex - length;
+    position = lastIndex - length;
   } else throw new Error("Internal Error: Bad warning");
   console.warn(
-    `${content} @ char ${index}\n  source: ${source}\n${" ".repeat(
-      index + 10
+    `${content} @ char ${position}\n  source: ${source}\n${" ".repeat(
+      position + 10
     )}${"^".repeat(length)}`
   );
 }

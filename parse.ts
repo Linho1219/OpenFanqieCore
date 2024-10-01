@@ -13,7 +13,7 @@ import { Note, SIGN_CMD_LIST, NOTE_ORN_LIST, createNote } from "./types";
 import { SignType, Sign, createSign } from "./types";
 import { Mark } from "./types";
 import { Barline, createBarline, BARLINE_ORN_LIST } from "./types";
-import { Line } from "./types";
+import { State,Line } from "./types";
 import { RawLine, RawLineMulti, RawPage, DivideResult } from "./types";
 import { warn } from "./warn";
 
@@ -39,7 +39,7 @@ function divideScript(code: string): DivideResult {
     }
     const prefix = raw.match(/^([A-Z][0-9]*("[^"]+")?):/)?.[1];
     if (prefix === undefined) {
-      warn("Prefix Error: Prefix missing", { source: raw, index: 0 });
+      warn("Prefix Error: Prefix missing", { source: raw, position:0 });
       continue;
     }
     const data = raw.slice(prefix.length + 1).trim();
@@ -51,7 +51,7 @@ function divideScript(code: string): DivideResult {
           if (metadata.version !== undefined)
             warn(
               `Prefix Error: Version code already defined as '${metadata.version}'`,
-              { source: raw, index: 0, length: raw.length }
+              { source: raw, position:0, length: raw.length }
             );
           metadata.version = data;
           break;
@@ -70,13 +70,13 @@ function divideScript(code: string): DivideResult {
               `Prefix Error: Mode already defined as ${formatMode(
                 metadata.mode
               )}`,
-              { source: raw, index: 0, length: raw.length }
+              { source: raw, position:0, length: raw.length }
             );
           else if (data.match(/^[A-G][#$]?$/) !== null) metadata.mode = data;
           else
             warn(`Prefix Error: Illegal mode expression '${data}'`, {
               source: raw,
-              index: prefix.length,
+              position:prefix.length,
               lastIndex: raw.length,
             });
           break;
@@ -88,7 +88,7 @@ function divideScript(code: string): DivideResult {
           } else {
             warn(`Prefix Error: Illegal meter expression '${data}'`, {
               source: raw,
-              index: prefix.length,
+              position:prefix.length,
               lastIndex: raw.length,
             });
           }
@@ -102,7 +102,7 @@ function divideScript(code: string): DivideResult {
         default: {
           warn(
             `Internal Error: Registered prefix ${prefix} without implement`,
-            { source: raw, index: 0, length: prefix.length }
+            { source: raw, position:0, length: prefix.length }
           );
           break;
         }
@@ -127,7 +127,7 @@ function divideScript(code: string): DivideResult {
         if (lastLyc === undefined)
           warn(`Prefix Error: Lyric must be attached to score`, {
             source: raw,
-            index: 0,
+            position:0,
             length: prefix.length,
           });
         else lastLyc.push(data);
@@ -135,7 +135,7 @@ function divideScript(code: string): DivideResult {
     } else {
       warn(`Prefix Error: Unknown prefix '${prefix}'`, {
         source: raw,
-        index: 0,
+        position:0,
         length: prefix.length,
       });
     }
@@ -148,7 +148,6 @@ function divideScript(code: string): DivideResult {
 
 /** 编译一个旋律行 */
 function parseLine(input: string) {
-  type State = "space" | "note" | "sign" | "modifier" | "barline" | "command";
   function judgeState(char: string) {
     if (char === " ") return "space";
     if (char.match(/[a-z&+]/) !== null) return "command";
@@ -176,8 +175,8 @@ function parseLine(input: string) {
   };
   let curntCmd = "";
 
-  for (let index = 0; index < input.length; index++) {
-    const char = input[index],
+  for (let position = 0; position < input.length; position++) {
+    const char = input[position],
       state: State = judgeState(char);
 
     // 命令结算
@@ -185,25 +184,28 @@ function parseLine(input: string) {
       const command = curntCmd.slice(1),
         lastToken = line.notes.at(-1);
       if (SIGN_CMD_LIST.includes(command)) {
-        if (command === "zkh") line.notes.push(createSign("parenthese-left"));
+        if (command === "zkh")
+          line.notes.push(createSign("parenthese-left", line.notes.length));
         else if (command === "ykh")
-          line.notes.push(createSign("parenthese-right"));
+          line.notes.push(createSign("parenthese-right", line.notes.length));
         else
           warn(
             `Internal Error: Command '${curntCmd}' registered as Sign but failed to find implement`,
             {
               source: input,
-              lastIndex: index,
+              lastIndex: position,
               length: curntCmd.length,
             }
           );
       } else if (lastToken !== undefined) {
         if (lastToken.cate === "Note" && NOTE_ORN_LIST.includes(command)) {
+          if (lastToken.ornaments === undefined) lastToken.ornaments = [];
           lastToken.ornaments.push(command);
         } else if (
           lastToken.cate === "Barline" &&
           BARLINE_ORN_LIST.includes(command)
         ) {
+          if (lastToken.ornaments === undefined) lastToken.ornaments = [];
           lastToken.ornaments.push(command);
         } else {
           let warnStr;
@@ -214,7 +216,7 @@ function parseLine(input: string) {
           else warnStr = `Unknown command '${curntCmd}'`;
           warn("Command Error: " + warnStr, {
             source: input,
-            lastIndex: index,
+            lastIndex: position,
             length: curntCmd.length,
           });
         }
@@ -227,7 +229,7 @@ function parseLine(input: string) {
         else warnStr = `Unknown command '${curntCmd}'`;
         warn("Command Error: " + warnStr, {
           source: input,
-          lastIndex: index,
+          lastIndex: position,
           length: curntCmd.length,
         });
       }
@@ -243,25 +245,25 @@ function parseLine(input: string) {
         else
           warn("Command Error: Unexpected '&' in command", {
             source: input,
-            index,
+            position,
           });
       } else {
         if (curntCmd.slice(0, 1) === "&") curntCmd += char;
         else
           warn("Command Error: Missing '&' before command", {
             source: input,
-            index,
+            position,
           });
       }
     else if (state === "note") {
-      line.notes.push(createNote(char));
+      line.notes.push(createNote(char, line.notes.length));
     } else if (state === "sign") {
-      line.notes.push(createSign(judgeSignType(char)));
+      line.notes.push(createSign(judgeSignType(char), line.notes.length));
     } else if (state === "modifier") {
       if (lastToken === undefined)
         warn(
           `Modifier Error: Unexpected modifier '${char}' at the beginning of a line`,
-          { source: input, index }
+          { source: input, position }
         );
       else if (lastToken.cate === "Note") {
         switch (char) {
@@ -303,7 +305,7 @@ function parseLine(input: string) {
           default:
             warn(
               `Modifier Error: Unexpected modifier '${char}' after ${lastToken.type}`,
-              { source: input, index }
+              { source: input, position }
             );
             break;
         }
@@ -320,26 +322,26 @@ function parseLine(input: string) {
         else
           warn(
             `Modifier Error: Unexpected modifier '${char}' after barline ${lastToken.type}`,
-            { source: input, index }
+            { source: input, position }
           );
       } else
         warn(
           `Modifier Error: Unexpected modifier '${char}' after ${lastToken.cate}`,
-          { source: input, index }
+          { source: input, position }
         );
     } else if (state === "barline") {
       if (lastToken === undefined || lastToken.cate !== "Barline") {
         if (char === "|")
           // "|"
-          line.notes.push(createBarline("normal"));
+          line.notes.push(createBarline("normal", line.notes.length));
         else if (char === ":") {
           // ":|"
-          if (input[index + 1] === "|")
-            line.notes.push(createBarline("repeat-right"));
+          if (input[position + 1] === "|")
+            line.notes.push(createBarline("repeat-right", line.notes.length));
           else
             warn("Barline Error: Unexpected ':' without '|'", {
               source: input,
-              index,
+              position,
             });
         }
       } else {
@@ -353,7 +355,7 @@ function parseLine(input: string) {
           else
             warn(
               `Barline Error: Unexpected '|' after complete barline ${lastToken.type}`,
-              { source: input, index }
+              { source: input, position }
             );
         } else if (char === ":") {
           if (lastToken.type === "normal")
@@ -365,7 +367,7 @@ function parseLine(input: string) {
           else
             warn(
               `Barline Error: Unexpected ':' after complete barline ${lastToken.type}`,
-              { source: input, index }
+              { source: input, position }
             );
         }
       }
