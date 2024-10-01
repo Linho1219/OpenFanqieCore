@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "cross-env NODE_NO_WARNINGS=1 node --loader ts-node/esm index.ts",
-    "debug": "cross-env NODE_NO_WARNINGS=1 node --loader ts-node/esm parse.ts",
+    "debug": "cross-env NODE_NO_WARNINGS=1 node --loader ts-node/esm test.ts",
     "build": "tsc",
     "serve": "node dist/index.js"
   },
