@@ -2,7 +2,7 @@
  * 将脚本内容解析为对象。
  */
 
-import { Metadata, METADATA_PREFIX, formatMode } from "./types";
+import { Metadata, METADATA_PREFIX, formatMode, MarkReg } from "./types";
 import {
   RawPageConfig,
   PageConfig,
@@ -11,14 +11,14 @@ import {
 } from "./types";
 import { Note, SIGN_CMD_LIST, NOTE_ORN_LIST, createNote } from "./types";
 import { SignType, Sign, createSign } from "./types";
-import { Mark } from "./types";
+import { Mark, SPEC_CHAR } from "./types";
 import { Barline, createBarline, BARLINE_ORN_LIST } from "./types";
-import { State,Line } from "./types";
+import { State, Line } from "./types";
 import { RawLine, RawLineMulti, RawPage, DivideResult } from "./types";
 import { warn } from "./warn";
 
 /** 将脚本源代码转换为 Metadata 和 RawLine */
-function divideScript(code: string): DivideResult {
+export function divideScript(code: string): DivideResult {
   code.replaceAll("&hh&", "\n"); // 原版前端用 &hh& 表示换行符
   const arr = code.split("\n");
   const metadata: Metadata = {
@@ -39,7 +39,7 @@ function divideScript(code: string): DivideResult {
     }
     const prefix = raw.match(/^([A-Z][0-9]*("[^"]+")?):/)?.[1];
     if (prefix === undefined) {
-      warn("Prefix Error: Prefix missing", { source: raw, position:0 });
+      warn("Prefix Error: Prefix missing", { source: raw, position: 0 });
       continue;
     }
     const data = raw.slice(prefix.length + 1).trim();
@@ -51,7 +51,7 @@ function divideScript(code: string): DivideResult {
           if (metadata.version !== undefined)
             warn(
               `Prefix Error: Version code already defined as '${metadata.version}'`,
-              { source: raw, position:0, length: raw.length }
+              { source: raw, position: 0, length: raw.length }
             );
           metadata.version = data;
           break;
@@ -70,13 +70,13 @@ function divideScript(code: string): DivideResult {
               `Prefix Error: Mode already defined as ${formatMode(
                 metadata.mode
               )}`,
-              { source: raw, position:0, length: raw.length }
+              { source: raw, position: 0, length: raw.length }
             );
           else if (data.match(/^[A-G][#$]?$/) !== null) metadata.mode = data;
           else
             warn(`Prefix Error: Illegal mode expression '${data}'`, {
               source: raw,
-              position:prefix.length,
+              position: prefix.length,
               lastIndex: raw.length,
             });
           break;
@@ -88,7 +88,7 @@ function divideScript(code: string): DivideResult {
           } else {
             warn(`Prefix Error: Illegal meter expression '${data}'`, {
               source: raw,
-              position:prefix.length,
+              position: prefix.length,
               lastIndex: raw.length,
             });
           }
@@ -102,7 +102,7 @@ function divideScript(code: string): DivideResult {
         default: {
           warn(
             `Internal Error: Registered prefix ${prefix} without implement`,
-            { source: raw, position:0, length: prefix.length }
+            { source: raw, position: 0, length: prefix.length }
           );
           break;
         }
@@ -127,7 +127,7 @@ function divideScript(code: string): DivideResult {
         if (lastLyc === undefined)
           warn(`Prefix Error: Lyric must be attached to score`, {
             source: raw,
-            position:0,
+            position: 0,
             length: prefix.length,
           });
         else lastLyc.push(data);
@@ -135,7 +135,7 @@ function divideScript(code: string): DivideResult {
     } else {
       warn(`Prefix Error: Unknown prefix '${prefix}'`, {
         source: raw,
-        position:0,
+        position: 0,
         length: prefix.length,
       });
     }
@@ -147,7 +147,7 @@ function divideScript(code: string): DivideResult {
 }
 
 /** 编译一个旋律行 */
-function parseLine(input: string) {
+export function parseLine(input: string) {
   function judgeState(char: string) {
     if (char === " ") return "space";
     if (char.match(/[a-z&+]/) !== null) return "command";
@@ -174,10 +174,17 @@ function parseLine(input: string) {
     notes: [],
   };
   let curntCmd = "";
-
+  let forceJump: number | undefined = undefined;
+  let tempMark: Array<MarkReg> = [];
   for (let position = 0; position < input.length; position++) {
     const char = input[position],
       state: State = judgeState(char);
+
+    // 强制跳转
+    if (forceJump !== undefined) {
+      if (position === forceJump) forceJump = undefined;
+      else continue;
+    }
 
     // 命令结算
     if (state !== "command" && curntCmd !== "") {
@@ -236,10 +243,59 @@ function parseLine(input: string) {
       curntCmd = "";
     }
 
-    // 进入字符判断流程
-    /** 上一个有意义的元素对象 */
     const lastToken = line.notes.at(-1);
-    if (state === "command")
+    // Mark 类型起始特判
+    if (SPEC_CHAR.includes(char)) {
+      switch (char) {
+        case '"': {
+          const quoted: string | undefined = input
+            .slice(position)
+            .match(/"([^"]+)"/)?.[1];
+          if (quoted !== undefined) {
+            const lastToken = line.notes.at(-1);
+            if (lastToken?.cate === "Barline") {
+              const meterMatch = quoted.match(/p:(\d+)\/(\d+)/);
+              if (meterMatch !== null) {
+                const [, first, second] = meterMatch;
+                const meter = createSign("meter", line.notes.length);
+                meter.meter = [Number(first), Number(second)];
+                line.notes.push(meter);
+              } else
+                warn(`Sign Error: Illegal temporary meter format '${quoted}'`, {
+                  source: input,
+                  position,
+                  length: quoted.length + 2,
+                });
+            } else if (lastToken?.cate === "Note") {
+              lastToken.comment = quoted;
+            } else {
+              warn(
+                `Modifier Error: Comment must be attached to a note or a rest but found ${lastToken?.cate}`,
+                {
+                  source: input,
+                  position,
+                  length: quoted.length + 2,
+                }
+              );
+            }
+            forceJump = position + quoted.length + 2;
+            continue;
+          } else {
+            warn(`Modifier Error: Unexpected '"' without closing`, {
+              source: input,
+              position,
+            });
+          }
+          break;
+        }
+        default: {
+          warn(
+            `Internal Error: Specialized char ${char} registered without implement`,
+            { source: input, position }
+          );
+        }
+      }
+    } else if (state === "command") {
       if (char === "&") {
         if (curntCmd === "") curntCmd = "&";
         else
@@ -255,7 +311,7 @@ function parseLine(input: string) {
             position,
           });
       }
-    else if (state === "note") {
+    } else if (state === "note") {
       line.notes.push(createNote(char, line.notes.length));
     } else if (state === "sign") {
       line.notes.push(createSign(judgeSignType(char), line.notes.length));
@@ -294,6 +350,7 @@ function parseLine(input: string) {
           }
           case ".": {
             // 附点
+            if (lastToken.dot === undefined) lastToken.dot = 0;
             lastToken.dot++;
             break;
           }
@@ -373,137 +430,13 @@ function parseLine(input: string) {
       }
     }
   }
+  if (forceJump !== undefined) {
+    warn(`Internal Error: Forced jump not finished`, {
+      source: input,
+      position: 0,
+    });
+  }
   return line;
 }
-
-import fs from "fs";
-// fs.writeFileSync(
-//   "./data.json",
-//   JSON.stringify(
-//     parseLine(
-//       "0/&zkh 1'/ 7/ &sfp 6/ :| 5/ 4/ 3/ 2/ |&ty 1/ 2// 3// 4// 5// 6// 7// | 1'/ 5/ 1'/ 0/&ykh :| 5 6 | 5/ 3. | 5,/ 1/ 4/ 3/ |"
-//     )
-//   )
-// );
-fs.writeFileSync(
-  "./data.json",
-  JSON.stringify(
-    divideScript(
-      `#============================以下为简谱头部定义==========================
-B: 时　忆
-B: 福州一中 2024届(11)班
-Z: 林嘉欣 庄忆 词
-Z: 黄若丞 曲
-D: C
-P: 4/4
-J: 80
-#============================以下开始简谱正文============================
-Q1"女声": 0/ 5,/ | (2/ 3//) 3// 0 2/ 3/ 5/ 3/ | 0 0 0 0/ 5,/ | (2/ 3//) 3// 0 2/ 3/ 5/ 1/ | 0 0 0 0/ 5,/ |
-C1: @我想@在@清晨眺望@@@@我想@在@午后轻唱@@@@我
-
-Q2"男高": 0 | 0 0 0 0 | 2,/ 3,/ 5,/ 3,/ 0 0 | 0 0 0 0 | 2,/ 3,/ 5,/ 1,/ 0 0 |
-C2: @@@@@清晨眺望@@@@@@午后轻唱
-
-Q3"男低": 0 | 1, - - - | - - - 0 | 3, - - - | - - - 0 |
-C3: @呜@呜
-
-Q1: 3/ 4// 4// 0/ 5// 4// 0/ 3/ 2/ 1/ | 0 0 0/ 6,/ (1/ 2/) | 3 (- 3/ 2/ 1/) (2/ | 2) (- - 2/) 0/ |
-C1: 想和你@一起@在黄昏@@@许下@愿@@@望
-Q2: 0 0 0 0 | 0/ 3,/ 2,/ 1,/ 0 0 | 6, - - - | 7, - - 0/ 5,,/ |
-C2: @@@@@在黄昏@@愿望@我
-Q3: 4, - - - | - - - 0 | 4, - - - | 5, - - - |
-C3: 呜@愿望
-
-Q1: 0 0 0 0 | 2/ 3/ 5/ 3/ 0 0 | 0 0 0 0 | 7/ 1'/ 7/ 5/ 0 0/ 5,/ |
-C1: @@@@走出彷徨@@@@@@那么荒唐@@我
-Q2:  (2,/ 3,/) 0 2,/ 3,/ 5,/ 3,/ | 0 0 0 0/ 5,,/ | (2,/ 3,/) 0 2,/ 3,/ 6,/ 3,/ | 0 0 0 0 |
-C2: 想@@走出彷徨@@@@我想不@那么荒唐@@@@
-Q3: 1, - - - | - - - 0 | 3, - - - | - - - 0 |
-C3:呜@呜
-
-Q1: 3/ 4/ 3/ 4/ 5/ 4/ 3/ 1/ | 1 2/ (2/ 2) 0 | 1/ 2/ 3/ 1'/ 7/ 1'/ 2/ 1/ | 1/ 2// (3// 3/) 2// 1// (y7/ 7/ 6/) (y6/ 5/ 3/) |
-C1: 想在黄金时代不留下遗憾@@那个晴天不曾言语斑驳的@午后初见你的样子
-Q2: 5,/ 6,/ 5,/ 6,/ 1/ 6,/ 0 | 5, - - 0 | 6, - 5#, - | 3, - 2, - |
-C2: 想在黄金时代呜呜@呜呜呜呜
-Q3: 2, - - - | 5,, - - 0 | 1, - 7,, - | 5,, - 4#, - |
-C3: 呜呜@呜呜呜呜
-
-[fenye]
-
-Q1: 6/ 5// 5// 0/ 2// 3// 5/ 1/ 7,/ 1/ | 6/ 5// (5// 5) 1'/ 7/ 6// 7// 0/ |
-C1: 四楼的@阳光不偏不倚我们的@故事开始
-Q2: 4, - 3, - | 6,/ 5,// (5,// 5,) 1/ 7,/ 6,// 7,// 0/ |
-C2: 啊啊我们的@故事开始
-Q3: 1, - 1, - | 4,/ 3,// (3,// 3) 4,/ 5,/ 4,// 5,// 0/ |
-C3: 啊啊我们的@故事开始
-
-Q1: 3/ 2/ 3/ 5/ 2 3 | 3/ 2/ 3/ 1'/ 2/ 3/ (y3/ 4/ 5/) | 5/ 1/ (y3/ 4/ 5/) 5/ 1/ 0/ 5,/ | 5/ 4// 4// 3// 6./ 5 1/ 2/ |
-C1: 美好熬成时光时光唱成歌谣也许某一天就在那一天@故事也会有终点我们
-Q2: 1,/ 7,,/ 1,/ 3,/ 0 7,, | 1, - 6,/ 5,/ 0 | 4, - 3, - | 2, - 5, - |
-C2: 美好熬成@时光歌谣@呜呜啊啊
-Q3: 1, - 7,, - | 6,, - 5,, - | 4,, - 3,, - | 4,, - 5,, - |
-C3: 呜呜呜啊呜呜啊啊
-
-Q1: 3 2/ 1// (2// 2) 2/ 1/ | 6&yc - 0/ 2// 3// 4/ 3// 4// | 0 5// 5// 1/ 2/ 1/ - ||/
-C1: 挥手告别@所以啊@这首歌一定@要大声地唱
-Q2:  (6, 6,/.) (5,#// 5,) 5=, | 4,# - 0/ 6,// 5,// 6,/ 5,// 6,// | 0 5,// 5,// 5,/ 5,/ 1/ 0 ||/
-C2: 呜@呜@呜啊@这首歌一定@要大声地唱
-Q3:  (6,, 6,,/.) (7,,// 7,,) 2, | 2, - 0/ 2,/ - | 0 5,,// 5,,// 5,,/&xhy0 0 ||/
-C3: 呜@呜@呜啊@啊@嘟嘟嘟
-
-
-Q1: 0/ 3// 2// 3// 2// 3// 2// 3// 2// 3// 2// 3// 1// 2/ | 0/ 3// 2// 3// 2// 3// 2// 3// 2// 3// 2// 3// 5// 3/ | 0/ 3// 2// 3// 2// 3// 2// 2// 1// 2// 3// 2/ 1/ |
-C1: @不会做的问题前后左右互相帮@请你不要假装做过的题没印象@木棉飘落窗下也许带着匆忙
-Q2: 0/ 3,// 2,// 3,// 2,// 3,// 2,// 3,// 2,// 3,// 2,// 3,// 1,// 2,/ | 0/ 3,// 2,// 3,// 2,// 3,// 2,// 3,// 2,// 3,// 2,// 3,// 5,// 3,/ | 0/ 3,// 2,// 3,// 2,// 3,// 2,// 2,// 1,// 2,// 3,// 2,/ 1,/ |
-C2: @不会做的问题前后左右互相帮@请你不要假装做过的题没印象@木棉飘落窗下也许带着匆忙
-Q3: 1,/ 5,/ 1,// 1,// 5,/ 3,/ 7,/ 3,// 3,// 7,/ | 6,,/ 3,/ 6,,// 6,,// 3,/ 5,,/ 2,/ 5,,// 5,,// 2,/ | 4,,/ 1,/ 4,,// 4,,// 1,/ 3,/ 7,/ 3,// 3,// 6,/ |
-C3: 嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟
-
-
-Q1: 0/ 4// 4// 4// 3// 2// 1// 4// 3// 4// 5// 1// 2// 2/ | 0/ 3// 2// 3// 2// 3// 2// 9// 9// 9// 9// 9// 9// 9/ | 0/ 3// 2// 3// 2// 3// 3// 3// 2// 3// 2// 3// 2// 3/ |
-C1: @下课铃还没响我就想逃到远方@如果你去装水记得帮我带一杯@后黑板不空荡有欢喜与你分享
-Q2: 0/ 4,// 4,// 4,// 3,// 2,// 1,// 4,// 3,// 4,// 5,// 1,// 2,// 2,/ | 0/ 3,// 2,// 3,// 2,// 3,// 2,// 9// 9// 9// 9// 9// 9// 9/ | 0/ 3,// 2,// 3,// 2,// 3,// 3,// 3,// 2,// 3,// 2,// 3,// 2,// 3,/ |
-C2: @下课铃还没响我就想逃到远方@如果你去装水记得帮我带一杯@后黑板不空荡有欢喜与你分享
-Q3: 2,/ 6,/ 2,// 2,// 6,/ 5,,/ 2,/ 5,,// 5,,// 2,/ | 1,/ 5,/ 1,// 1,// 5,/ 3,/ 7,/ 3,// 3,// 7,/ | 6,,/ 3,/ 6,,// 6,,// 3,/ 5,,/ 2,/ 5,,// 5,,// 2,/ |
-C3: 嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟
-
-[fenye]
-
-Q1: 0/ 3// 2// 3// 2// 3// 2// 2// 1// 2// 3// 2// 1// 1/ | 0/ 4// 3// 4// 3// 4// 3// 4// 3// 4// 5// 4// 3// 1// 2// | 1 - - - ||/
-C1: @带上你的背包拾起你眼里的光@阳光下的少年快去占有一个篮球场
-Q2: 0/ 3,// 2,// 3,// 2,// 3,// 2,// 2,// 1,// 2,// 3,// 2,// 1,// 1,/ | 0/ 4,// 3,// 4,// 3,// 4,// 3,// 4,// 3,// 4,// 5,// 4,// 3,// 1,// 2,// | 1, - - - ||/
-C2: @带上你的背包拾起你眼里的光@阳光下的少年快去占有一个篮球场
-Q3: 4,,/ 1,/ 4,,// 4,,// 1,/ 3,/ 7,/ 3,// 3,// 6,/ | 2,/ 6,/ 2,// 2,// 6,/ 5,,/ 2,/ 5,,// 5,,// 2,/ | 1, - - - ||/
-C3: 嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟嘟呜
-
-Q1: 3/ 2/ 3/ 5/ 2 3 | 3/ 2/ 3/ 1'/ 2/ 3/ (y3/ 4/ 5/) | 5/ 1/ (y3/ 4/ 5/) 5/ 1/ 0/ 5,/ | 5/ 4// 4// 3// 6./ 5 1/ 2/ |
-C1: 美好熬成时光时光唱成歌谣也许某一天就在那一天@时间真的有终点我们
-Q2: 1,/ 7,,/ 1,/ 3,/ 0 7,, | 1, - 6,/ 5,/ 0 | 4, - 3, - | 2, - 5, - |
-C2: 美好熬成@时光歌谣@呜呜啊啊
-Q3: 1, - 2, - | 6,, - 7,, - | 1, - 7,, - | 6,, - 5,, - |
-C3: 呜呜呜啊呜呜啊啊
-
-Q1: 3 7/ 1'// (3// 3) 2/ 1/ | 6&yc - 0/ 2// 3// 4/ 3// 4// | 0 5// 5// 1/ 2/ 1/ - ||/
-C1: 挥手告别@所以啊@这首歌一定@要大声地唱
-Q2:  (6, 6,/.) (5,#// 5,) 5=, | 4,# - 0/ 6,// 5,// 6,/ 5,// 6,// | 0 5,// 5,// 5,/ 5,/ 1/ 0 ||/
-C2: 呜@呜@呜啊@这首歌一定@要大声地唱
-Q3:  (6,, 6,,/.) (7,,// 7,,) 2, | 2, - 0/ 2,/ - | 0 5,,// 5,,// 5,,/ 0 0 ||/
-C3: 呜@呜@呜啊@啊@嘟嘟嘟
-
-
-Q1: 3/"1=D" 2/ 3/ 5/ 5#/ 6// (7// 7/) 3/ | 1'/ 7// (1'// 1'/) 1'/ 2'/ 1'/ 5/ 3/ | 3// 4// 3/ 4/ 3/ 4/ 3/ 2/ 1/ | 2/ 3// (3// 3) - 0/ 3// 3// |
-C1: 我还想着四季绚@烂我还想@看落日远山我还想和你一起看星辰流转@@那段
-Q2: 1, - 3, - | 6, - 5, - | 4, - 5, - | 1, - - - |
-C2: 呜呜呜呜呜呜呜
-
-Q1: 3/ 3/ 3/ 3// (2// 2/) (7,/ 7,/) 6,// 7,// | 1/ 1'// (1'// 1') 7/ 6/ 3/ (2/ | 2&ycy) - - 0/ 2// 3// | 4/ 3// (4// 4) 5&rit/ 6/ 7/ (1'/ | 1') - - ||
-C1: 时光不曾言@语@四楼的走廊@载满风雨@@我们的故事@未完待续
-Q2: 6,/ 6,/ 6,/ 6,// 5#,// 5 0 | 6, - 5, (4#, | 4#) - - 0/ 2,// 3,// | 4,/ 3,// (4,// 4,) 5,/ 6,/ 7,/ (1,/ | 1,) - - ||
-C2: 时光不曾言语@呜呜呜呜@我们的故事@未完待续
-Q3: 2, - 3, - | 6,, - 5,, (4,,# | 4,,#) - - 0 | 2, - (5,, - | 5,,) - - ||
-C3: 呜呜呜呜呜呜@呜呜`
-    )
-  )
-);
 
 export function parse(code: string, config: RawPageConfig) {}

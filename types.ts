@@ -140,7 +140,7 @@ export function translatePageConfig(raw: RawPageConfig): PageConfig {
 /** 音符和休止符 */
 export type Note = {
   cate: "Note";
-  index: number;
+
   type: "note" | "rest";
   /** 音高，数字 1-7，休止符为 0, X 为 9*/
   pitch: Number;
@@ -149,9 +149,9 @@ export type Note = {
   /** 时值，存储分母，四分音符为 4，八分为 8 */
   duration: number;
   /** 附点个数 */
-  dot: 0 | 1 | 2;
+  dot?: 0 | 1 | 2;
   /** 升# 降$ 还原= */
-  accidental?:  "sharp" | "flat" | "natural";
+  accidental?: "sharp" | "flat" | "natural";
   /** 装饰记号，用 & 开头 */
   ornaments?: Array<string>;
   /** 倚音 */
@@ -161,6 +161,9 @@ export type Note = {
   };
   /** 多连音 */
   tuplets?: number;
+  /** 注释 */
+  comment?: string;
+  index: number;
 };
 
 /** Sign 命令列表 */
@@ -200,12 +203,12 @@ export const NOTE_ORN_LIST = [
 /** 新建音符/休止符 */
 export const createNote = (char: string, index: number): Note => ({
   cate: "Note",
-  index,
+
   type: char === "0" ? "rest" : "note",
   pitch: Number(char),
   range: 0,
   duration: 4,
-  dot: 0,
+  index,
 });
 
 export type SignType =
@@ -218,25 +221,43 @@ export type SignType =
 /** 在谱面中与音符所占位置相同的记号 */
 export type Sign = {
   cate: "Sign";
-  index: number;
+
   type: SignType;
   meter?: [number, number];
   ornaments?: Array<string>;
+  index: number;
 };
 
 export const createSign = (type: SignType, index: number): Sign => ({
   cate: "Sign",
-  index,
+
   type,
+  index,
 });
 
 /** 在谱面中标记在音符上的记号 */
-export type Mark = {};
+type MarkType = "cresc" | "dim" | "tuplets" | "legato";
+
+export type Mark = {
+  cate: "Mark";
+  type: MarkType;
+  begin: number;
+  end: number;
+};
+
+export type MarkReg = {
+  position: number;
+  type: MarkType;
+  object?: Mark;
+  index: number;
+};
+
+export const SPEC_CHAR = ['"', "(", ")"];
 
 /** 小节线 */
 export type Barline = {
   cate: "Barline";
-  index: number;
+
   type:
     | "normal" // "|"
     | "end" // "||"
@@ -247,6 +268,7 @@ export type Barline = {
     | "hidden" // "|/"，不显示也不占据空间
     | "invisible"; // "|*"，不显示但占据空间
   ornaments?: Array<string>;
+  index: number;
 };
 
 export function createBarline(
@@ -263,21 +285,16 @@ export function createBarline(
 ): Barline {
   return {
     cate: "Barline",
-    index,
+
     type,
+    index,
   };
 }
 
 /** 小节线装饰记号列表 */
 export const BARLINE_ORN_LIST = ["fine", "dc", "ds", "ty", "hs"];
 
-export   type State = "space" | "note" | "sign" | "modifier" | "barline" | "command";
-
-/** 行 */
-export type Line = {
-  notes: Array<Note | Sign | Barline>;
-  marks?: [];
-};
+// 分块部分
 
 export type RawLine = {
   index: number;
@@ -291,4 +308,19 @@ export type RawPage = Array<RawLineMulti>;
 export type DivideResult = {
   metadata: Metadata;
   rawPages: Array<RawPage>;
+};
+
+// 行解析部分
+
+export type State =
+  | "space"
+  | "note"
+  | "sign"
+  | "modifier"
+  | "barline"
+  | "command";
+
+export type Line = {
+  notes: Array<Note | Sign | Barline>;
+  marks?: [];
 };
