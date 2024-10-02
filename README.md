@@ -1,4 +1,4 @@
-# OpenFanqie
+# OpenFanqieCore
 
 [番茄简谱](http://jianpu99.net/)的第三方后端开源实现。使用 Node.js 编写。
 
