@@ -3,12 +3,7 @@
  */
 
 import { Metadata, METADATA_PREFIX, formatMode, MarkReg } from "./types";
-import {
-  RawPageConfig,
-  PageConfig,
-  PAGE_PRESETS,
-  translatePageConfig,
-} from "./types";
+import { RawPageConfig, PageConfig, PAGE_PRESETS } from "./types";
 import { Note, SIGN_CMD_LIST, NOTE_ORN_LIST, createNote } from "./types";
 import { SignType, Sign, createSign } from "./types";
 import { Mark, SPEC_CHAR } from "./types";
@@ -178,8 +173,8 @@ export function parseLine(input: string) {
   let forceJump: number | undefined = undefined;
   /** 括号配对栈 */
   let parentheseStack: Array<MarkReg> = [];
-  /** 渐强渐弱配对栈 */
-  let dynamicStack: Array<MarkReg> = [];
+  /** 渐强渐弱配对，因为不允许重叠所以只要一个 */
+  let dynamicStack: MarkReg | undefined = undefined;
   for (let position = 0; position < input.length; position++) {
     const char = input[position],
       state: State = judgeState(char);
@@ -251,8 +246,9 @@ export function parseLine(input: string) {
     }
 
     const lastToken = line.notes.at(-1);
-    // 进入正常字符判断流程
+    // 进入字符判断流程
     if (SPEC_CHAR.includes(char)) {
+      // 特殊字符处理
       switch (char) {
         case '"': {
           const quoted: string | undefined = input
@@ -367,6 +363,52 @@ export function parseLine(input: string) {
           }
           break;
         }
+        case "<":
+        case ">": {
+          if (dynamicStack === undefined) {
+            dynamicStack = {
+              position,
+              index: line.notes.length,
+              type: <"cresc" | "dim">{ "<": "cresc", ">": "dim" }[char],
+            };
+          } else {
+            warn(`Mark Error: Dynamics marks should not be nested`, {
+              source: input,
+              position,
+            });
+          }
+          break;
+        }
+        case "!": {
+          if (dynamicStack !== undefined) {
+            const begin = dynamicStack.index;
+            const end = line.notes.length - 1;
+            if (dynamicStack.index <= end) {
+              if (line.marks === undefined) line.marks = [];
+              line.marks.push({
+                cate: "Mark",
+                type: dynamicStack.type,
+                begin,
+                end,
+              });
+            } else {
+              warn(
+                `Mark Error: Tokens within long dynamic marks must be no less than 2`,
+                {
+                  source: input,
+                  position: dynamicStack.position,
+                  lastIndex: position,
+                }
+              );
+            }
+          } else {
+            warn(`Mark Error: Unexpected '!' without previous '<' or '>'`, {
+              source: input,
+              position,
+            });
+          }
+          break;
+        }
         default: {
           warn(
             `Internal Error: Specialized char ${char} registered without implement`,
@@ -379,7 +421,7 @@ export function parseLine(input: string) {
       if (char === "&") {
         curntCmd = "&";
       } else {
-        if (curntCmd.slice(0, 1) === "&") curntCmd += char;
+        if (curntCmd[0] === "&") curntCmd += char;
         else
           warn("Command Error: Missing '&' before command", {
             source: input,

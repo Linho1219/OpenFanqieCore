@@ -224,13 +224,12 @@ export type Sign = {
   type: SignType;
   meter?: [number, number];
   ornaments?: Array<string>;
-  tuplets?:number
+  tuplets?: number;
   index: number;
 };
 
 export const createSign = (type: SignType, index: number): Sign => ({
   cate: "Sign",
-
   type,
   index,
 });
@@ -252,7 +251,7 @@ export type MarkReg = {
   index: number;
 };
 
-export const SPEC_CHAR = ['"', "(", ")"];
+export const SPEC_CHAR = ['"', "(", ")", "<", ">", "!", "[", "]"];
 
 /** 小节线 */
 export type Barline = {
@@ -322,5 +321,5 @@ export type State =
 
 export type Line = {
   notes: Array<Note | Sign | Barline>;
-  marks?:Array<Mark>;
+  marks?: Array<Mark>;
 };
