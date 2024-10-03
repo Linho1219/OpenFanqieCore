@@ -12,6 +12,37 @@ import { State, Line } from "./types";
 import { RawLine, RawLineMulti, RawPage, DivideResult } from "./types";
 import { warn } from "./warn";
 
+export function translatePageConfig(raw: RawPageConfig): PageConfig {
+  return {
+    size: PAGE_PRESETS[raw.page],
+    margin: {
+      top: Number(raw.margin_top),
+      right: Number(raw.margin_right),
+      bottom: Number(raw.margin_bottom),
+      left: Number(raw.margin_left),
+      topExtra: Number(raw.body_margin_top),
+    },
+    title: {
+      fontFamily: raw.biaoti_font,
+      fontSize: Number(raw.biaoti_size),
+    },
+    subtitle: {
+      fontFamily: raw.biaoti_font,
+      fontSize: Number(raw.fubiaoti_size),
+    },
+    lyric: {
+      fontFamily: raw.geci_font,
+      fontSize: Number(raw.geci_size),
+    },
+    note: <"modern" | "roman" | "classic">(
+      { a: "modern", b: "roman", c: "classic" }[raw.shuzi_font]
+    ),
+    slur: <"auto" | "arc" | "flat">(
+      ["auto", "arc", "flat"][raw.lianyinxian_type]
+    ),
+  };
+}
+
 /** 将脚本源代码转换为 Metadata 和 RawLine */
 export function divideScript(code: string): DivideResult {
   code.replaceAll("&hh&", "\n"); // 原版前端用 &hh& 表示换行符
