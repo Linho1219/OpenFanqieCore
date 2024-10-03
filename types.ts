@@ -169,7 +169,7 @@ export type Note = {
 /** Sign 命令列表 */
 export const SIGN_CMD_LIST = ["zkh", "ykh"];
 
-/** 音符装饰记号列表 */
+/** 音符装饰记号列表，记入 note.ornaments */
 export const NOTE_ORN_LIST = [
   "pp",
   "p",
@@ -218,7 +218,7 @@ export type SignType =
   | "parenthese-left"
   | "parenthese-right";
 
-/** 在谱面中与音符所占位置相同的记号 */
+/** 在谱面中与音符所占位置相同的记号，混入 line.notes */
 export type Sign = {
   cate: "Sign";
   type: SignType;
@@ -234,8 +234,8 @@ export const createSign = (type: SignType, index: number): Sign => ({
   index,
 });
 
-/** 在谱面中标记在音符上的记号 */
-type MarkType = "cresc" | "dim" | "tuplets" | "legato";
+/** 在谱面中跨音符的记号，记录在 line.marks */
+type MarkType = "cresc" | "dim" | "tuplets" | "legato" | "volta";
 
 export type Mark = {
   cate: "Mark";
@@ -256,7 +256,6 @@ export const SPEC_CHAR = ['"', "(", ")", "<", ">", "!", "[", "]"];
 /** 小节线 */
 export type Barline = {
   cate: "Barline";
-
   type:
     | "normal" // "|"
     | "end" // "||"

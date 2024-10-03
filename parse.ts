@@ -67,25 +67,25 @@ export function divideScript(code: string): DivideResult {
               )}`,
               { source: raw, position: 0, length: raw.length }
             );
-          else if (data.match(/^[A-G][#$]?$/) !== null) metadata.mode = data;
-          else
+          else if (data.match(/^[A-G][#$]?$/) === null)
             warn(`Prefix Error: Illegal mode expression '${data}'`, {
               source: raw,
               position: prefix.length,
               lastIndex: raw.length,
             });
+          else metadata.mode = data;
           break;
         }
         case "P": {
           const res = data.match(/(\d+)\s*\/\s*(\d+)/);
-          if (res !== null) {
-            metadata.meter = [Number(res[1]), Number(res[2])];
-          } else {
+          if (res === null) {
             warn(`Prefix Error: Illegal meter expression '${data}'`, {
               source: raw,
               position: prefix.length,
               lastIndex: raw.length,
             });
+          } else {
+            metadata.meter = [Number(res[1]), Number(res[2])];
           }
           break;
         }
@@ -368,7 +368,7 @@ export function parseLine(input: string) {
           if (dynamicStack === undefined) {
             dynamicStack = {
               position,
-              index: line.notes.length,
+              index: line.notes.length - 1,
               type: <"cresc" | "dim">{ "<": "cresc", ">": "dim" }[char],
             };
           } else {
@@ -409,6 +409,20 @@ export function parseLine(input: string) {
           }
           break;
         }
+        case "[": {
+          if (lastToken !== undefined) {
+          } else {
+            //////
+            warn(`Internal Error: Unexpected '[' at`, {
+              source: input,
+              position,
+            });
+          }
+          break;
+        }
+        case "]": {
+          break;
+        }
         default: {
           warn(
             `Internal Error: Specialized char ${char} registered without implement`,
@@ -421,12 +435,12 @@ export function parseLine(input: string) {
       if (char === "&") {
         curntCmd = "&";
       } else {
-        if (curntCmd[0] === "&") curntCmd += char;
-        else
+        if (curntCmd[0] !== "&")
           warn("Command Error: Missing '&' before command", {
             source: input,
             position,
           });
+        else curntCmd += char;
       }
     } else if (state === "note") {
       line.notes.push(createNote(char, line.notes.length));
@@ -510,13 +524,13 @@ export function parseLine(input: string) {
           line.notes.push(createBarline("normal", line.notes.length));
         else if (char === ":") {
           // ":|"
-          if (input[position + 1] === "|")
-            line.notes.push(createBarline("repeat-right", line.notes.length));
-          else
+          if (input[position + 1] !== "|")
             warn("Barline Error: Unexpected ':' without '|'", {
               source: input,
               position,
             });
+          else
+            line.notes.push(createBarline("repeat-right", line.notes.length));
         }
       } else {
         if (char === "|") {
