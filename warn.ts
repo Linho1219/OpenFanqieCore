@@ -6,8 +6,15 @@ interface warnPos {
 }
 
 /** 在控制台打印警告 */
-export function warn(content: string, { source, position, length, lastIndex }: warnPos) {
-  if (position !== undefined && length !== undefined && lastIndex === undefined) {
+export function warn(
+  content: string,
+  { source, position, length, lastIndex }: warnPos
+) {
+  if (
+    position !== undefined &&
+    length !== undefined &&
+    lastIndex === undefined
+  ) {
     // 无需调整
   } else if (
     position !== undefined &&
@@ -20,7 +27,7 @@ export function warn(content: string, { source, position, length, lastIndex }: w
     length === undefined &&
     lastIndex !== undefined
   ) {
-    length = lastIndex - position;
+    length = lastIndex - position + 1;
   } else if (
     position === undefined &&
     length !== undefined &&

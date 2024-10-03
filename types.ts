@@ -140,7 +140,6 @@ export function translatePageConfig(raw: RawPageConfig): PageConfig {
 /** 音符和休止符 */
 export type Note = {
   cate: "Note";
-
   type: "note" | "rest";
   /** 音高，数字 1-7，休止符为 0, X 为 9*/
   pitch: Number;
@@ -155,7 +154,7 @@ export type Note = {
   /** 装饰记号，用 & 开头 */
   ornaments?: Array<string>;
   /** 倚音 */
-  decoration?: {
+  grace?: {
     position: "begin" | "end";
     content: Array<Note>;
   };
@@ -242,6 +241,7 @@ export type Mark = {
   type: MarkType;
   begin: number;
   end: number;
+  tuplets?:number
 };
 
 export type MarkReg = {
