@@ -46,7 +46,7 @@ export type RawPageConfig = {
   margin_right: string;
   /** 标题字体 */
   biaoti_font: RawFontFamily;
-  /** 数字字体 现代/罗马/经典 */
+  /** 数字字体 现代/经典/罗马 */
   shuzi_font: "a" | "b" | "c";
   /** 歌词字体 */
   geci_font: RawFontFamily;
@@ -70,12 +70,35 @@ export type RawPageConfig = {
   lianyinxian_type: "0" | "1" | "2";
 };
 
+export const DEFAULT_PAGE_CONFIG: RawPageConfig = {
+  page: "A4",
+  margin_top: "80",
+  margin_bottom: "80",
+  margin_left: "80",
+  margin_right: "80",
+  biaoti_font: "Microsoft YaHei",
+  shuzi_font: "b",
+  geci_font: "Microsoft YaHei",
+  height_quci: "13",
+  height_cici: "10",
+  height_ciqu: "40",
+  height_shengbu: "0",
+  biaoti_size: "36",
+  fubiaoti_size: "20",
+  geci_size: "18",
+  body_margin_top: "40",
+  lianyinxian_type: "0",
+};
+
 type FontConfig = {
   /** 字体家族 */
   fontFamily: string;
   /** 字号 */
   fontSize: number;
 };
+
+export type NoteStyle = "modern" | "roman" | "classic";
+export type SlurStyle = "auto" | "arc" | "flat";
 
 /** 页面设置 */
 export type PageConfig = {
@@ -94,9 +117,9 @@ export type PageConfig = {
   subtitle: FontConfig;
   lyric: FontConfig;
   /** 音符数字样式 */
-  note: "modern" | "roman" | "classic";
+  note: NoteStyle;
   /** 连音线样式 */
-  slur: "auto" | "arc" | "flat";
+  slur: SlurStyle;
 };
 
 export const PAGE_PRESETS = {
@@ -133,7 +156,7 @@ export type Note = {
   comment?: string;
   index: number;
   /** 歌词 */
-  lyric?:Array<string>
+  lyric?: Array<string>;
 };
 
 /** Sign 命令列表 */
@@ -298,4 +321,14 @@ export type Line = {
   notes: Array<Note | Sign | Barline>;
   marks?: Array<Mark>;
   lrcCnt: number;
+  caption?: string;
+};
+
+export type LineMulti = Array<Line>;
+export type Page = Array<LineMulti>;
+
+export type FullObj = {
+  config: PageConfig;
+  metadata: Metadata;
+  pages: Array<Page>;
 };

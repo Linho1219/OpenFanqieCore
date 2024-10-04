@@ -3,13 +3,14 @@
  */
 
 import { Metadata, METADATA_PREFIX, formatMode, MarkReg } from "./types";
-import { RawPageConfig, PageConfig, PAGE_PRESETS } from "./types";
+import { RawPageConfig, DEFAULT_PAGE_CONFIG } from "./types";
+import { PageConfig, PAGE_PRESETS, NoteStyle, SlurStyle } from "./types";
 import { Note, SIGN_CMD_LIST, NOTE_ORN_LIST, createNote } from "./types";
-import { SignType, Sign, createSign } from "./types";
-import { Mark, SPEC_CHAR } from "./types";
-import { Barline, createBarline, BARLINE_ORN_LIST } from "./types";
-import { State, Line } from "./types";
-import { RawLine, RawLineMulti, RawPage, DivideResult } from "./types";
+import { Sign, createSign } from "./types";
+import { SPEC_CHAR } from "./types";
+import { createBarline, BARLINE_ORN_LIST } from "./types";
+import { State, Line, FullObj } from "./types";
+import { RawLineMulti, RawPage, DivideResult } from "./types";
 import { warn } from "./warn";
 
 export function translatePageConfig(raw: RawPageConfig): PageConfig {
@@ -34,12 +35,8 @@ export function translatePageConfig(raw: RawPageConfig): PageConfig {
       fontFamily: raw.geci_font,
       fontSize: Number(raw.geci_size),
     },
-    note: <"modern" | "roman" | "classic">(
-      { a: "modern", b: "roman", c: "classic" }[raw.shuzi_font]
-    ),
-    slur: <"auto" | "arc" | "flat">(
-      ["auto", "arc", "flat"][raw.lianyinxian_type]
-    ),
+    note: <NoteStyle>{ a: "modern", b: "classic", c: "roman" }[raw.shuzi_font],
+    slur: <SlurStyle>["auto", "arc", "flat"][raw.lianyinxian_type],
   };
 }
 
@@ -753,7 +750,7 @@ export function parseLine(source: string) {
   return line;
 }
 
-/** 将歌词合入旋律行 */
+/** 将一行歌词合入旋律行 */
 export function combineLrc(line: Line, source: string) {
   function isCJK(char: string) {
     const code = char.charCodeAt(0);
@@ -809,4 +806,26 @@ export function combineLrc(line: Line, source: string) {
   );
 }
 
-export function parse(code: string, config: RawPageConfig) {}
+/** 编译全部内容 */
+export function parse(
+  code: string,
+  config: RawPageConfig = DEFAULT_PAGE_CONFIG
+): FullObj {
+  const { metadata, rawPages } = divideScript(code);
+  return {
+    config: translatePageConfig(config),
+    metadata,
+    pages: rawPages.map((rawPage) =>
+      rawPage.map((rawLineMulti) =>
+        rawLineMulti.map((rawLine): Line => {
+          const line = {
+            ...parseLine(rawLine.rawLine),
+            caption: rawLine.caption,
+          };
+          rawLine.rawLyric.forEach((lrc) => combineLrc(line, lrc));
+          return line;
+        })
+      )
+    ),
+  };
+}
