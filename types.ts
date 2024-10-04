@@ -132,6 +132,8 @@ export type Note = {
   /** 注释 */
   comment?: string;
   index: number;
+  /** 歌词 */
+  lyric?:Array<string>
 };
 
 /** Sign 命令列表 */
@@ -181,12 +183,9 @@ export const createNote = (char: string, index: number): Note => ({
   index,
 });
 
-export type SignType =
-  | "fermata"
-  | "invisible"
-  | "meter"
-  // | "parenthese-left"
-  // | "parenthese-right";
+export type SignType = "fermata" | "invisible" | "meter";
+// | "parenthese-left"
+// | "parenthese-right";
 
 /** 在谱面中与音符所占位置相同的记号，混入 line.notes */
 export type Sign = {
@@ -298,4 +297,5 @@ export type State =
 export type Line = {
   notes: Array<Note | Sign | Barline>;
   marks?: Array<Mark>;
+  lrcCnt: number;
 };

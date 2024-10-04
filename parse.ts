@@ -195,6 +195,7 @@ export function parseLine(source: string) {
   source = source.replaceAll("&a tempo", "&atempo");
   const line: Line = {
     notes: [],
+    lrcCnt: 0,
   };
   let curntCmd = "";
   /** 强制跳转索引 */
@@ -750,6 +751,62 @@ export function parseLine(source: string) {
     });
   }
   return line;
+}
+
+/** 将歌词合入旋律行 */
+export function combineLrc(line: Line, source: string) {
+  function isCJK(char: string) {
+    const code = char.charCodeAt(0);
+    // CJK Unified Ideographs
+    if (code >= 0x4e00 && code <= 0x9fff) return true;
+    // CJK Unified Ideographs Extension A
+    if (code >= 0x3400 && code <= 0x4dbf) return true;
+    // CJK Unified Ideographs Extension B
+    if (code >= 0x20000 && code <= 0x2a6df) return true;
+    // Hiragana
+    if (code >= 0x3040 && code <= 0x309f) return true;
+    // Katakana
+    if (code >= 0x30a0 && code <= 0x30ff) return true;
+    // Hangul Syllables
+    if (code >= 0xac00 && code <= 0xd7af) return true;
+    return false;
+  }
+  const lrcArr: Array<string> = [];
+  let forceJump: number | undefined = undefined;
+  [...source].forEach((char, position) => {
+    if (forceJump !== undefined) {
+      if (position !== forceJump) return;
+      else forceJump = undefined;
+    }
+
+    if (char === "~" || char === "/" || char === " ") return;
+    if (char === "_") char = " ";
+    const index = lrcArr.length - 1;
+    if (isCJK(char))
+      if (source[position - 1] === "~" || source[position - 1] === '"')
+        lrcArr[index] += char;
+      else lrcArr.push(char);
+    else if (char === "@") lrcArr.push("");
+    else if (char === '"') {
+      const comment = source.slice(position).match(/"([^"]+)"/)?.[0];
+      if (comment === undefined) {
+        warn(`Lyric Error: Unclosed '['`, { source, position });
+        return;
+      }
+      lrcArr.push(comment);
+      forceJump = position + comment.length;
+    } else if (source[position - 1] === "/" || isCJK(source[position - 1]))
+      lrcArr.push(char);
+    else lrcArr[index] += char;
+  });
+
+  line.lrcCnt++;
+  (<Array<Note>>line.notes.filter(({ cate }) => cate === "Note")).forEach(
+    (note, lrcIndex) => {
+      if (note.lyric === undefined) note.lyric = [];
+      note.lyric.push(lrcArr[lrcIndex] ?? "");
+    }
+  );
 }
 
 export function parse(code: string, config: RawPageConfig) {}
