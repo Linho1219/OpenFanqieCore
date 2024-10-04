@@ -220,22 +220,23 @@ export function parseLine(source: string) {
     ) {
       const command = curntCmd.slice(1),
         lastToken = line.notes.at(-1);
-      // if (SIGN_CMD_LIST.includes(command)) {
-      //   if (command === "zkh")
-      //     line.notes.push(createSign("parenthese-left", line.notes.length));
-      //   else if (command === "ykh")
-      //     line.notes.push(createSign("parenthese-right", line.notes.length));
-      //   else
-      //     warn(
-      //       `Internal Error: Command '${curntCmd}' registered as Sign but failed to find implement`,
-      //       {
-      //         source,
-      //         lastPos: position,
-      //         length: curntCmd.length,
-      //       }
-      //     );
-      // } else
-      if (lastToken !== undefined) {
+      if (SIGN_CMD_LIST.includes(command)) {
+        // if (command === "zkh")
+        //   line.notes.push(createSign("parenthese-left", line.notes.length));
+        // else if (command === "ykh")
+        //   line.notes.push(createSign("parenthese-right", line.notes.length));
+        if(command==='dsb')
+          line.notes.push(createSign("bracket", line.notes.length));
+        else
+          warn(
+            `Internal Error: Command '${curntCmd}' registered as Sign but failed to find implement`,
+            {
+              source,
+              lastPos: position,
+              length: curntCmd.length,
+            }
+          );
+      } else if (lastToken !== undefined) {
         if (lastToken.cate === "Note" && NOTE_ORN_LIST.includes(command)) {
           if (lastToken.ornaments === undefined) lastToken.ornaments = [];
           lastToken.ornaments.push(command);
@@ -349,15 +350,22 @@ export function parseLine(source: string) {
             return;
           }
           if (line.notes[tempReg.begin].cate !== "Note") {
-            warn(
-              `Mark Error: The first token of ${tempReg.type} must be note or rest`,
-              {
-                source,
-                position: tempReg.position,
-                lastPos: position,
-              }
-            );
-            return;
+            if (
+              line.notes[tempReg.begin].type === "fermata" &&
+              line.notes[tempReg.begin - 1].cate === "Note"
+            )
+              tempReg.begin--;
+            else {
+              warn(
+                `Mark Error: The first token of ${tempReg.type} must be note or rest`,
+                {
+                  source,
+                  position: tempReg.position,
+                  lastPos: position,
+                }
+              );
+              return;
+            }
           }
           if (lastToken!.cate !== "Note" && lastToken!.type !== "fermata") {
             warn(
@@ -819,8 +827,8 @@ export function parse(
       rawPage.map((rawLineMulti) =>
         rawLineMulti.map((rawLine): Line => {
           const line = {
-            ...parseLine(rawLine.rawLine),
             caption: rawLine.caption,
+            ...parseLine(rawLine.rawLine),
           };
           rawLine.rawLyric.forEach((lrc) => combineLrc(line, lrc));
           return line;

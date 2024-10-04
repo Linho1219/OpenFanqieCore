@@ -160,7 +160,7 @@ export type Note = {
 };
 
 /** Sign 命令列表 */
-export const SIGN_CMD_LIST = [];
+export const SIGN_CMD_LIST = ["dsb"];
 
 /** 音符装饰记号列表，记入 note.ornaments */
 export const NOTE_ORN_LIST = [
@@ -206,7 +206,7 @@ export const createNote = (char: string, index: number): Note => ({
   index,
 });
 
-export type SignType = "fermata" | "invisible" | "meter";
+export type SignType = "fermata" | "invisible" | "meter" | "bracket";
 // | "parenthese-left"
 // | "parenthese-right";
 
