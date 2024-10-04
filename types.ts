@@ -106,7 +106,6 @@ export const PAGE_PRESETS = {
   A5_horizontal: { width: 1193, height: 840 },
 };
 
-
 /** 音符和休止符 */
 export type Note = {
   cate: "Note";
@@ -211,14 +210,20 @@ export type Mark = {
   type: MarkType;
   begin: number;
   end: number;
-  tuplets?:number
+  /** 多连音 */
+  tuplets?: number;
+  /** 跳房子的文本 */
+  caption?: string;
+  /** 跳房子结尾不可见 */
+  lastInv?: boolean;
 };
 
 export type MarkReg = {
   position: number;
   type: MarkType;
   object?: Mark;
-  index: number;
+  begin: number;
+  caption?: string;
 };
 
 export const SPEC_CHAR = ['"', "(", ")", "<", ">", "!", "[", "]"];

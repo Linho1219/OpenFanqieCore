@@ -2,38 +2,38 @@ interface warnPos {
   source: string;
   position?: number;
   length?: number;
-  lastIndex?: number;
+  lastPos?: number;
 }
 
 /** 在控制台打印警告 */
 export function warn(
   content: string,
-  { source, position, length, lastIndex }: warnPos
+  { source, position, length, lastPos }: warnPos
 ) {
   if (
     position !== undefined &&
     length !== undefined &&
-    lastIndex === undefined
+    lastPos === undefined
   ) {
     // 无需调整
   } else if (
     position !== undefined &&
     length === undefined &&
-    lastIndex === undefined
+    lastPos === undefined
   ) {
     length = 1;
   } else if (
     position !== undefined &&
     length === undefined &&
-    lastIndex !== undefined
+    lastPos !== undefined
   ) {
-    length = lastIndex - position + 1;
+    length = lastPos - position + 1;
   } else if (
     position === undefined &&
     length !== undefined &&
-    lastIndex !== undefined
+    lastPos !== undefined
   ) {
-    position = lastIndex - length;
+    position = lastPos - length;
   } else throw new Error("Internal Error: Bad warning");
   console.warn(
     `${content} @ char ${position}\n  source: ${source}\n${" ".repeat(

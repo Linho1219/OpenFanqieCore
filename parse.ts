@@ -101,7 +101,7 @@ export function divideScript(code: string): DivideResult {
             warn(`Prefix Error: Illegal mode expression '${data}'`, {
               source: raw,
               position: prefix.length,
-              lastIndex: raw.length,
+              lastPos: raw.length,
             });
           else metadata.mode = data;
           break;
@@ -112,7 +112,7 @@ export function divideScript(code: string): DivideResult {
             warn(`Prefix Error: Illegal meter expression '${data}'`, {
               source: raw,
               position: prefix.length,
-              lastIndex: raw.length,
+              lastPos: raw.length,
             });
           } else {
             metadata.meter = [Number(res[1]), Number(res[2])];
@@ -139,13 +139,11 @@ export function divideScript(code: string): DivideResult {
           curntMulti = [];
           curntPage.push(curntMulti);
         }
-        const caption = prefix.match(/"([^"]+)"$/)?.[1];
-
         curntMulti.push({
           index,
           rawLine: data,
           rawLyric: [],
-          caption,
+          caption: prefix.match(/"([^"]+)"$/)?.[1],
         });
       } else {
         const lastLyc = curntMulti.at(-1)?.rawLyric;
@@ -203,8 +201,11 @@ export function parseLine(source: string) {
   let forceJump: number | undefined = undefined;
   /** 括号配对栈 */
   let parentheseStack: Array<MarkReg> = [];
-  /** 渐强渐弱配对，因为不允许重叠所以只要一个 */
+  /** 渐强渐弱配对，不允许嵌套所以只要一个 */
   let dynamicStack: MarkReg | undefined = undefined;
+  /** 跳房子配对，因为不允许嵌套所以只要一个 */
+  let voltaStack: MarkReg | undefined = undefined;
+
   [...source].forEach((char, position) => {
     // 强制跳转
     if (forceJump !== undefined) {
@@ -231,7 +232,7 @@ export function parseLine(source: string) {
             `Internal Error: Command '${curntCmd}' registered as Sign but failed to find implement`,
             {
               source,
-              lastIndex: position,
+              lastPos: position,
               length: curntCmd.length,
             }
           );
@@ -254,7 +255,7 @@ export function parseLine(source: string) {
           else warnStr = `Unknown command '${curntCmd}'`;
           warn("Command Error: " + warnStr, {
             source,
-            lastIndex: position,
+            lastPos: position,
             length: curntCmd.length,
           });
         }
@@ -267,7 +268,7 @@ export function parseLine(source: string) {
         else warnStr = `Unknown command '${curntCmd}'`;
         warn("Command Error: " + warnStr, {
           source,
-          lastIndex: position,
+          lastPos: position,
           length: curntCmd.length,
         });
       }
@@ -326,7 +327,7 @@ export function parseLine(source: string) {
             parentheseStack.push({
               type: "tuplets",
               position,
-              index: line.notes.length,
+              begin: line.notes.length,
             });
             forceJump = position + 2;
           } else {
@@ -334,7 +335,7 @@ export function parseLine(source: string) {
             parentheseStack.push({
               type: "legato",
               position,
-              index: line.notes.length,
+              begin: line.notes.length,
             });
           }
           break;
@@ -348,13 +349,13 @@ export function parseLine(source: string) {
             });
             return;
           }
-          if (line.notes[tempReg.index].cate !== "Note") {
+          if (line.notes[tempReg.begin].cate !== "Note") {
             warn(
               `Mark Error: The first token of ${tempReg.type} must be note or rest`,
               {
                 source,
                 position: tempReg.position,
-                lastIndex: position,
+                lastPos: position,
               }
             );
             return;
@@ -365,20 +366,20 @@ export function parseLine(source: string) {
               {
                 source,
                 position: tempReg.position,
-                lastIndex: position,
+                lastPos: position,
               }
             );
             return;
           }
-          const begin = tempReg.index;
+          const begin = tempReg.begin;
           const end = line.notes.length - 1;
-          if (tempReg.index >= end) {
+          if (tempReg.begin >= end) {
             warn(
               `Mark Error: Tokens within ${tempReg.type} must be no less than 2`,
               {
                 source,
                 position: tempReg.position,
-                lastIndex: position,
+                lastPos: position,
               }
             );
             return;
@@ -396,7 +397,7 @@ export function parseLine(source: string) {
                 {
                   source,
                   position: tempReg.position,
-                  lastIndex: position,
+                  lastPos: position,
                 }
               );
               return;
@@ -405,7 +406,7 @@ export function parseLine(source: string) {
               warn(`Mark Warning: Tuplet number should not be a power of 2`, {
                 source,
                 position: tempReg.position,
-                lastIndex: position,
+                lastPos: position,
               });
             (<Array<Note | Sign>>legatoNotes).forEach((token) => {
               token.tuplets = end - begin + 1;
@@ -422,46 +423,47 @@ export function parseLine(source: string) {
         }
         case "<":
         case ">": {
-          if (dynamicStack === undefined) {
-            dynamicStack = {
-              position,
-              index: line.notes.length - 1,
-              type: <"cresc" | "dim">{ "<": "cresc", ">": "dim" }[char],
-            };
-          } else {
+          if (dynamicStack !== undefined) {
             warn(`Mark Error: Dynamics marks must not be nested`, {
               source,
               position,
             });
+            return;
           }
+          dynamicStack = {
+            position,
+            begin: line.notes.length - 1,
+            type: <"cresc" | "dim">{ "<": "cresc", ">": "dim" }[char],
+          };
           break;
         }
         case "!": {
-          if (dynamicStack !== undefined) {
-            const begin = dynamicStack.index;
-            const end = line.notes.length - 1;
-            if (dynamicStack.index >= end)
-              warn(
-                `Mark Warning: Tokens within long dynamic marks must be no less than 2`,
-                {
-                  source,
-                  position: dynamicStack.position,
-                  lastIndex: position,
-                }
-              );
-            if (line.marks === undefined) line.marks = [];
-            line.marks.push({
-              cate: "Mark",
-              type: dynamicStack.type,
-              begin,
-              end,
-            });
-          } else {
+          if (dynamicStack === undefined) {
             warn(`Mark Error: Unexpected '!' without previous '<' or '>'`, {
               source,
               position,
             });
+            return;
           }
+          const begin = dynamicStack.begin;
+          const end = line.notes.length - 1;
+          if (dynamicStack.begin >= end)
+            warn(
+              `Mark Warning: Tokens within long dynamic marks should be no less than 2`,
+              {
+                source,
+                position: dynamicStack.position,
+                lastPos: position,
+              }
+            );
+          if (line.marks === undefined) line.marks = [];
+          line.marks.push({
+            cate: "Mark",
+            type: dynamicStack.type,
+            begin,
+            end,
+          });
+
           break;
         }
         case "[": {
@@ -475,7 +477,7 @@ export function parseLine(source: string) {
             const graceMatch = source
               .slice(position)
               .match(/^\[(h?)([^\]]+)\]/);
-            if (graceMatch === null)
+            if (graceMatch === null) {
               warn(
                 `Mark Error: Unexpected '[' without leagal grace expression`,
                 {
@@ -483,38 +485,59 @@ export function parseLine(source: string) {
                   position,
                 }
               );
-            else {
-              const graceObj = parseLine(graceMatch[2]);
-              if (graceObj.marks !== undefined) {
+              return;
+            }
+            const graceObj = parseLine(graceMatch[2]);
+            if (graceObj.marks !== undefined) {
+              warn(`Mark Error: Unexpected marks in grace expression`, {
+                source,
+                position,
+                length: graceMatch[0].length,
+              });
+            } else {
+              try {
+                graceObj.notes.forEach((value) => {
+                  if (value.cate !== "Note" || value.type === "rest")
+                    throw new Error();
+                  value.duration *= 2;
+                });
+                lastToken.grace = {
+                  content: <Array<Note>>graceObj.notes,
+                  position: graceMatch[1] === "h" ? "end" : "begin",
+                };
+              } catch (e) {
                 warn(`Mark Error: Unexpected marks in grace expression`, {
                   source,
                   position,
                   length: graceMatch[0].length,
                 });
-              } else {
-                try {
-                  graceObj.notes.forEach((value) => {
-                    if (value.cate !== "Note" || value.type === "rest")
-                      throw new Error();
-                    value.duration *= 2;
-                  });
-                  lastToken.grace = {
-                    content: <Array<Note>>graceObj.notes,
-                    position: graceMatch[1] === "h" ? "end" : "begin",
-                  };
-                } catch (e) {
-                  warn(`Mark Error: Unexpected marks in grace expression`, {
-                    source,
-                    position,
-                    length: graceMatch[0].length,
-                  });
-                }
               }
-              forceJump = position + graceMatch[0].length;
             }
+            forceJump = position + graceMatch[0].length;
           } else if (lastToken.cate === "Barline") {
             // 跳房子
-            ////////////////
+            const voltaMatch = source.slice(position).match(/^\["([^"]+)"/);
+            if (voltaMatch === null) {
+              warn(`Mark Error: Illegal volta expression`, {
+                source,
+                position,
+              });
+              return;
+            }
+            if (voltaStack !== undefined) {
+              warn(`Mark Error: Voltas are not allowed to nest`, {
+                source,
+                position: voltaStack.position,
+              });
+              return;
+            }
+            voltaStack = {
+              type: "volta",
+              position,
+              begin: lastToken.index,
+              caption: voltaMatch[1],
+            };
+            forceJump = position + voltaMatch[0].length;
           } else {
             warn(`Mark Error: Unexpected '[' after ${lastToken.cate}`, {
               source,
@@ -525,6 +548,30 @@ export function parseLine(source: string) {
         }
         case "]": {
           // 一定是跳房子（倚音会直接跳到 ']' 后面）
+          if (lastToken?.cate !== "Barline") {
+            warn(`Mark Error: Unexpected ']' after ${lastToken?.cate}`, {
+              source,
+              position,
+            });
+            return;
+          }
+          if (voltaStack === undefined) {
+            warn(`Mark Error: Unexpected ']' without previous '['`, {
+              source,
+              position,
+            });
+            return;
+          }
+          if (line.marks === undefined) line.marks = [];
+          line.marks.push({
+            cate: "Mark",
+            type: "volta",
+            begin: voltaStack.begin,
+            end: lastToken.index,
+            caption: voltaStack.caption,
+            lastInv: false,
+          });
+          voltaStack = undefined;
           break;
         }
         default: {
@@ -602,7 +649,29 @@ export function parseLine(source: string) {
             break;
         }
       } else if (lastToken.cate === "Barline") {
-        if (char === "/" && lastToken.type === "normal")
+        if (char === "/" && source[position - 1] === "]") {
+          // "] +/"，跳房子
+          if (line.marks === undefined) {
+            warn(`Mark Error: Unexpected ']/' without previous volta`, {
+              source,
+              length: 2,
+              lastPos: position,
+            });
+            return;
+          }
+          const mark = line.marks.filter(
+            ({ type, end }) => type === "volta" && end === lastToken.index
+          )?.[0];
+          if (mark === undefined) {
+            warn(`Mark Error: Unexpected ']/' without previous volta`, {
+              source,
+              length: 2,
+              lastPos: position,
+            });
+            return;
+          }
+          mark.lastInv = true;
+        } else if (char === "/" && lastToken.type === "normal")
           // "| +/"
           lastToken.type = "hidden";
         else if (char === "/" && lastToken.type === "end")
