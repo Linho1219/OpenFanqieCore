@@ -135,10 +135,12 @@ export type Note = {
 };
 
 /** Sign 命令列表 */
-export const SIGN_CMD_LIST = ["zkh", "ykh"];
+export const SIGN_CMD_LIST = [];
 
 /** 音符装饰记号列表，记入 note.ornaments */
 export const NOTE_ORN_LIST = [
+  "zkh",
+  "ykh",
   "pp",
   "p",
   "mp",
@@ -183,8 +185,8 @@ export type SignType =
   | "fermata"
   | "invisible"
   | "meter"
-  | "parenthese-left"
-  | "parenthese-right";
+  // | "parenthese-left"
+  // | "parenthese-right";
 
 /** 在谱面中与音符所占位置相同的记号，混入 line.notes */
 export type Sign = {

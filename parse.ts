@@ -222,21 +222,22 @@ export function parseLine(source: string) {
     ) {
       const command = curntCmd.slice(1),
         lastToken = line.notes.at(-1);
-      if (SIGN_CMD_LIST.includes(command)) {
-        if (command === "zkh")
-          line.notes.push(createSign("parenthese-left", line.notes.length));
-        else if (command === "ykh")
-          line.notes.push(createSign("parenthese-right", line.notes.length));
-        else
-          warn(
-            `Internal Error: Command '${curntCmd}' registered as Sign but failed to find implement`,
-            {
-              source,
-              lastPos: position,
-              length: curntCmd.length,
-            }
-          );
-      } else if (lastToken !== undefined) {
+      // if (SIGN_CMD_LIST.includes(command)) {
+      //   if (command === "zkh")
+      //     line.notes.push(createSign("parenthese-left", line.notes.length));
+      //   else if (command === "ykh")
+      //     line.notes.push(createSign("parenthese-right", line.notes.length));
+      //   else
+      //     warn(
+      //       `Internal Error: Command '${curntCmd}' registered as Sign but failed to find implement`,
+      //       {
+      //         source,
+      //         lastPos: position,
+      //         length: curntCmd.length,
+      //       }
+      //     );
+      // } else
+      if (lastToken !== undefined) {
         if (lastToken.cate === "Note" && NOTE_ORN_LIST.includes(command)) {
           if (lastToken.ornaments === undefined) lastToken.ornaments = [];
           lastToken.ornaments.push(command);
