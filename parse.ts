@@ -218,14 +218,14 @@ export function parseLine(source: string) {
       (state !== "command" && curntCmd !== "") ||
       (char === "&" && curntCmd !== "")
     ) {
-      const command = curntCmd.slice(1),
+      const command = curntCmd.slice(1).replace("+", "_"),
         lastToken = line.notes.at(-1);
       if (SIGN_CMD_LIST.includes(command)) {
         // if (command === "zkh")
         //   line.notes.push(createSign("parenthese-left", line.notes.length));
         // else if (command === "ykh")
         //   line.notes.push(createSign("parenthese-right", line.notes.length));
-        if(command==='dsb')
+        if (command === "dsb")
           line.notes.push(createSign("bracket", line.notes.length));
         else
           warn(
@@ -710,16 +710,16 @@ export function parseLine(source: string) {
               position,
             });
           else
-            line.notes.push(createBarline("repeat-right", line.notes.length));
+            line.notes.push(createBarline("repeatR", line.notes.length));
         }
       } else {
         if (char === "|") {
           if (lastToken.type === "normal")
             // "||"
             lastToken.type = "end";
-          else if (lastToken.type === "repeat-right")
+          else if (lastToken.type === "repeatR")
             // ":|"
-            lastToken.type = "repeat-right";
+            lastToken.type = "repeatR";
           else
             warn(
               `Barline Error: Unexpected '|' after complete barline ${lastToken.type}`,
@@ -728,10 +728,10 @@ export function parseLine(source: string) {
         } else if (char === ":") {
           if (lastToken.type === "normal")
             // "|:"
-            lastToken.type = "repeat-left";
-          else if (lastToken.type === "repeat-right")
+            lastToken.type = "repeatL";
+          else if (lastToken.type === "repeatR")
             // ":|:"
-            lastToken.type = "repeat-double";
+            lastToken.type = "repeatD";
           else
             warn(
               `Barline Error: Unexpected ':' after complete barline ${lastToken.type}`,

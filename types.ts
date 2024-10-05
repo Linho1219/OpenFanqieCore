@@ -166,6 +166,7 @@ export const SIGN_CMD_LIST = ["dsb"];
 export const NOTE_ORN_LIST = [
   "zkh",
   "ykh",
+  "ppp",
   "pp",
   "p",
   "mp",
@@ -188,17 +189,16 @@ export const NOTE_ORN_LIST = [
   "shy",
   "xhy",
   "sby",
-  "sby+",
+  "sby_",
   "xby",
-  "xby+",
+  "xby_",
   "cy",
-  "cy+",
+  "cy_",
 ];
 
 /** 新建音符/休止符 */
 export const createNote = (char: string, index: number): Note => ({
   cate: "Note",
-
   type: char === "0" ? "rest" : "note",
   pitch: Number(char),
   range: 0,
@@ -252,41 +252,29 @@ export type MarkReg = {
 
 export const SPEC_CHAR = ['"', "(", ")", "<", ">", "!", "[", "]"];
 
+type BarlineType =
+  | "normal" // "|"
+  | "end" // "||"
+  | "double" // "||/"
+  | "repeatL" // "|:"
+  | "repeatR" // ":|"
+  | "repeatD" // ":|:"
+  | "hidden" // "|/"，不显示也不占据空间
+  | "invisible"; // "|*"，不显示但占据空间
+
 /** 小节线 */
 export type Barline = {
   cate: "Barline";
-  type:
-    | "normal" // "|"
-    | "end" // "||"
-    | "double" // "||/"
-    | "repeat-left" // "|:"
-    | "repeat-right" // ":|"
-    | "repeat-double" // ":|:"
-    | "hidden" // "|/"，不显示也不占据空间
-    | "invisible"; // "|*"，不显示但占据空间
+  type: BarlineType;
   ornaments?: Array<string>;
   index: number;
 };
 
-export function createBarline(
-  type:
-    | "normal"
-    | "end"
-    | "double"
-    | "repeat-left"
-    | "repeat-right"
-    | "repeat-double"
-    | "hidden"
-    | "invisible",
-  index: number
-): Barline {
-  return {
-    cate: "Barline",
-
-    type,
-    index,
-  };
-}
+export const createBarline = (type: BarlineType, index: number): Barline => ({
+  cate: "Barline",
+  type,
+  index,
+});
 
 /** 小节线装饰记号列表 */
 export const BARLINE_ORN_LIST = ["fine", "dc", "ds", "ty", "hs"];
