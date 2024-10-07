@@ -305,8 +305,10 @@ export type State =
   | "barline"
   | "command";
 
+export type Ele = Note | Sign | Barline;
+
 export type Line = {
-  notes: Array<Note | Sign | Barline>;
+  notes: Array<Ele>;
   marks?: Array<Mark>;
   lrcCnt: number;
   caption?: string;
