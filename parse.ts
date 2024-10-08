@@ -4,7 +4,7 @@
 
 import { Metadata, METADATA_PREFIX, formatMode, MarkReg } from "./types";
 import { RawPageConfig, DEFAULT_PAGE_CONFIG } from "./types";
-import { PageConfig, PAGE_PRESETS, NoteStyle, SlurStyle } from "./types";
+import { PageConfig, PAGE_PRESETS } from "./types";
 import { Note, SIGN_CMD_LIST, NOTE_ORN_LIST, createNote } from "./types";
 import { Sign, createSign } from "./types";
 import { SPEC_CHAR } from "./types";
@@ -35,8 +35,8 @@ export function translatePageConfig(raw: RawPageConfig): PageConfig {
       fontFamily: raw.geci_font,
       fontSize: Number(raw.geci_size),
     },
-    note: <NoteStyle>{ a: "modern", b: "classic", c: "roman" }[raw.shuzi_font],
-    slur: <SlurStyle>["auto", "arc", "flat"][raw.lianyinxian_type],
+    note: ({ a: "modern", b: "classic", c: "roman" } as const)[raw.shuzi_font],
+    slur: (["auto", "arc", "flat"] as const)[raw.lianyinxian_type],
   };
 }
 
@@ -440,7 +440,7 @@ export function parseLine(source: string) {
           dynamicStack = {
             position,
             begin: line.notes.length - 1,
-            type: <"cresc" | "dim">{ "<": "cresc", ">": "dim" }[char],
+            type: ({ "<": "cresc", ">": "dim" } as const)[char],
           };
           break;
         }
@@ -709,8 +709,7 @@ export function parseLine(source: string) {
               source,
               position,
             });
-          else
-            line.notes.push(createBarline("repeatR", line.notes.length));
+          else line.notes.push(createBarline("repeatR", line.notes.length));
         }
       } else {
         if (char === "|") {

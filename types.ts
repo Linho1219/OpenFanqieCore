@@ -97,9 +97,6 @@ type FontConfig = {
   fontSize: number;
 };
 
-export type NoteStyle = "modern" | "roman" | "classic";
-export type SlurStyle = "auto" | "arc" | "flat";
-
 /** 页面设置 */
 export type PageConfig = {
   size: {
@@ -117,9 +114,9 @@ export type PageConfig = {
   subtitle: FontConfig;
   lyric: FontConfig;
   /** 音符数字样式 */
-  note: NoteStyle;
+  note: "modern" | "roman" | "classic";
   /** 连音线样式 */
-  slur: SlurStyle;
+  slur: "auto" | "arc" | "flat";
 };
 
 export const PAGE_PRESETS = {
