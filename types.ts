@@ -30,7 +30,7 @@ export const formatMode = (mode: string) =>
   mode[0] + (mode[1] === "#" ? "♯" : "") + (mode[1] === "$" ? "♭" : "");
 
 /** 原始字体格式 */
-type RawFontFamily = "Microsoft YaHei" | "SimSun" | "SimHei" | "KaiTi";
+export type FontFamily = "Microsoft YaHei" | "SimSun" | "SimHei" | "KaiTi";
 
 /** 原始页面设置 */
 export type RawPageConfig = {
@@ -45,11 +45,11 @@ export type RawPageConfig = {
   /** 右边距 */
   margin_right: string;
   /** 标题字体 */
-  biaoti_font: RawFontFamily;
+  biaoti_font: FontFamily;
   /** 数字字体 现代/经典/罗马 */
   shuzi_font: "a" | "b" | "c";
   /** 歌词字体 */
-  geci_font: RawFontFamily;
+  geci_font: FontFamily;
   /** 曲的下间距 */
   height_quci: string;
   /** 词的下间距 */
