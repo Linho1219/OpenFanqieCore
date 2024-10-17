@@ -1,4 +1,5 @@
 # OpenFanqieCore
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FLinho1219%2FOpenFanqieCore.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2FLinho1219%2FOpenFanqieCore?ref=badge_shield)
 
 [番茄简谱](http://jianpu99.net/)的第三方后端开源实现。使用 Node.js 编写。
 
